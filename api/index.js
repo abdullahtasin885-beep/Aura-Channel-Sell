@@ -1,10 +1,11 @@
 /*
 |--------------------------------------------------------------------------
 | 𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍 (TURBO SPEED ENGINE ⚡)
-| - Model: Task Marketplace + Force Join Gate + Multi-Step Deposit
+| - Commands: /start (Main Menu) & /build (Developer Info)
+| - Deposit UI: Exact Match to Screenshot (bKash & Nagad)
+| - Clean & Short Welcome Messages
 | - Bot Token: 8362797762:AAH23qRjM7Lte-Mfcmxq9mNCNEZetXpvFZg
 | - Super Admin: 8045367594
-| - Payment Number: 01352946834 (Personal - Send Money)
 | - Render: https://aura-channel-sell.onrender.com
 | - Firebase: https://aura-channel-sell-default-rtdb.firebaseio.com/
 |--------------------------------------------------------------------------
@@ -21,10 +22,8 @@ const BOT_NAME = '𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍';
 const APP_URL = 'https://aura-channel-sell.onrender.com';
 const SUPER_ADMIN_ID = '8045367594';
 
-// পেমেন্ট তথ্য
-const PAYMENT_NUMBER = '01352946834'; // বিকাশ ও নগদ পার্সোনাল
-
-// ডিফল্ট লগ চ্যানেল ও লিংক
+// ডিফল্ট পেমেন্ট ও সাপোর্ট
+const DEFAULT_PAYMENT_NUMBER = '01352946834'; // বিকাশ ও নগদ পার্সোনাল
 const DEFAULT_DEPOSIT_LOG_ID = '-1003945593094';
 const DEFAULT_TASK_PROOF_LOG_ID = '-1003945593094';
 const DEFAULT_SUPPORT_URL = 'https://t.me/Sakib_Developer1';
@@ -49,7 +48,6 @@ const FIREBASE_AUTH_PASSWORD = 'mayabiri#';
 const cache = {
     users: new Map(),
     settings: new Map(),
-    packages: new Map(),
     usedTrxIds: new Set(),
     tasks: new Map(),
     userChannels: new Map(),
@@ -148,7 +146,7 @@ function normalizeChannelInput(input) {
 
 /*
 |--------------------------------------------------------------------------
-| ৫. ফায়ারবেস সিকিউর ক্লায়েন্ট
+| ৫. ফায়ারবেস ক্লায়েন্ট (REST API)
 |--------------------------------------------------------------------------
 */
 let cachedToken = null;
@@ -281,7 +279,7 @@ async function sendLongMessage(chatId, text, extra = null) {
 
 /*
 |--------------------------------------------------------------------------
-| ৭. ডাটাবেজ অপারেশনস
+| ৭. ডাটাবেজ অপারেশন ও পারমিশনস
 |--------------------------------------------------------------------------
 */
 async function getUser(userId) {
@@ -334,7 +332,7 @@ function isAdmin(userId) {
 
 /*
 |--------------------------------------------------------------------------
-| ৮. ফোর্স চ্যানেল ও রিয়েল-টাইম লিভার চেকার
+| ৮. ফোর্স চ্যানেল ও রিয়েল-টাইম গেট
 |--------------------------------------------------------------------------
 */
 async function alertSuperAdminBotRemoved(channel, index) {
@@ -352,7 +350,7 @@ async function alertSuperAdminBotRemoved(channel, index) {
     const alertText =
         `🚨 <b>সুপার এডমিন সতর্কতা: চ্যানেল থেকে বট রিমুভ হয়েছে!</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
-        `⚠️ <b>সমস্যা:</b> একজন ইউজার ভেরিফাই করতে গিয়ে আটকে গেছে, কারণ বটটিকে চ্যানেল থেকে অ্যাডমিন থেকে রিমুভ করা হয়েছে!\n\n` +
+        `⚠️ <b>সমস্যা:</b> চ্যানেল থেকে বটকে অ্যাডমিন থেকে রিমুভ করা হয়েছে!\n\n` +
         `🔢 <b>চ্যানেল ক্রম:</b> <b>চ্যানেল #${index}</b>\n` +
         `📢 <b>নাম:</b> <b>${escapeHtml(channel.channel_name || 'N/A')}</b>\n` +
         `🔗 <b>ইউজারনেম:</b> <code>${escapeHtml(channelUsername)}</code>\n` +
@@ -463,9 +461,9 @@ function showForceJoin(chatId, firstName = 'User') {
     ]);
 
     const text =
-        `👋 <b>Hello, ${escapeHtml(firstName)}!</b>\n\n` +
-        `📢 <b>Join All Channels To Continue.</b>\n` +
-        `<i>(You must be a member of all channels to access ${escapeHtml(BOT_NAME)})</i>`;
+        `👋 <b>হ্যালো, ${escapeHtml(firstName)}!</b>\n\n` +
+        `📢 <b>বটটি ব্যবহার করতে নিচের সকল চ্যানেলে জয়েন করুন।</b>\n` +
+        `<i>(সবগুলো চ্যানেলে জয়েন করে নিচের Claim বাটনে চাপ দিন)</i>`;
 
     return sendMessage(chatId, text, { inline_keyboard: inlineKeyboard });
 }
@@ -496,7 +494,7 @@ async function verifyAndRewardUser(fromId, callbackUser = null) {
         verified_at: now
     };
 
-    // 🎯 কঠোর রেফারেল রিওয়ার্ড প্রদান (চ্যানেল ভেরিফাই হলেই কেবল পাবে)
+    // 🎯 রেফারেল বোনাস প্রদান
     if (user.referred_by && !user.referral_rewarded && String(user.referred_by) !== String(fromId)) {
         const ref = await getUser(user.referred_by);
         if (ref) {
@@ -513,10 +511,10 @@ async function verifyAndRewardUser(fromId, callbackUser = null) {
 
             sendMessage(
                 user.referred_by,
-                `🎉 <b>New Referral Verified!</b>\n━━━━━━━━━━━━━━━━━━\n\n` +
-                `👤 User: <b>${escapeHtml(user.first_name || 'User')}</b>\n` +
-                `⭐ Bonus: <b>+${formatNumber(refBonus)} Coins</b>\n` +
-                `👥 Total Referrals: <b>${newTotalRefs}</b>`
+                `🎉 <b>নতুন রেফারেল সফল হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `👤 ইউজার: <b>${escapeHtml(user.first_name || 'User')}</b>\n` +
+                `⭐ বোনাস: <b>+${formatNumber(refBonus)} Coins</b>\n` +
+                `👥 মোট রেফারেল: <b>${newTotalRefs} জন</b>`
             ).catch(() => {});
         }
     }
@@ -527,12 +525,11 @@ async function verifyAndRewardUser(fromId, callbackUser = null) {
 
 /*
 |--------------------------------------------------------------------------
-| ৯. কীবোর্ড ও মেনুসমূহ (ইংলিশ + কালার স্টাইল)
+| ৯. কীবোর্ড ও মেনুসমূহ (ইংলিশ বাটন + কালার স্টাইল)
 |--------------------------------------------------------------------------
 */
 function getUserMenu(userId) {
     const keyboard = [
-        // সবার প্রথমে Earn Coins
         [{ text: '💰 Earn Coins', style: 'success' }],
         [{ text: '📢 Bot Refer Buy', style: 'primary' }, { text: '📦 Poll Vote Buy', style: 'primary' }],
         [{ text: '📜 My Tasks', style: 'primary' }, { text: '💳 Deposit', style: 'success' }],
@@ -545,52 +542,93 @@ function getUserMenu(userId) {
     return { keyboard, resize_keyboard: true };
 }
 
-function getAdminMenu() {
-    return {
-        keyboard: [
-            [{ text: '➕ Add Package', style: 'success' }, { text: '➖ Remove Package', style: 'danger' }],
-            [{ text: '📋 Package List', style: 'primary' }, { text: '📢 Force Channels', style: 'primary' }],
-            [{ text: '⚙️ Central Settings', style: 'primary' }, { text: '👥 Balance Control', style: 'danger' }],
-            [{ text: '🔙 Back to User Panel', style: 'danger' }]
-        ],
-        resize_keyboard: true
-    };
-}
+function getAdminMenu(userId) {
+    const isSuper = isSuperAdmin(userId);
+    const keyboard = [
+        [{ text: '📢 Force Channels', style: 'primary' }, { text: '⚙️ Central Settings', style: 'primary' }],
+        [{ text: '👥 Balance Control', style: 'danger' }]
+    ];
 
-function forceJoinKeyboard() {
-    return {
-        inline_keyboard: [
-            [
-                { text: '➕ চ্যানেল যোগ করুন', callback_data: 'force_add', style: 'success' },
-                { text: '➖ চ্যানেল রিমুভ করুন', callback_data: 'force_remove', style: 'danger' }
-            ],
-            [
-                { text: '📋 চ্যানেল তালিকা', callback_data: 'force_list', style: 'primary' }
-            ]
-        ]
-    };
+    if (isSuper) {
+        keyboard.push([{ text: '👮 Admin Management', style: 'primary' }]);
+    }
+
+    keyboard.push([{ text: '🔙 Back to User Panel', style: 'danger' }]);
+    return { keyboard, resize_keyboard: true };
 }
 
 function getCancelKeyboard() {
     return { keyboard: [[{ text: '/cancel', style: 'danger' }]], resize_keyboard: true, one_time_keyboard: true };
 }
 
-function getDepositPackagesKeyboard() {
-    const buttons = [];
-    const pkgs = Array.from(cache.packages.entries());
+function forceJoinKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '➕ Add Channel', callback_data: 'force_add', style: 'success' },
+                { text: '➖ Remove Channel', callback_data: 'force_remove', style: 'danger' }
+            ],
+            [
+                { text: '📋 Channel List', callback_data: 'force_list', style: 'primary' }
+            ]
+        ]
+    };
+}
 
-    for (let i = 0; i < pkgs.length; i += 2) {
-        const row = [];
-        const [id1, p1] = pkgs[i];
-        row.push({ text: `💵 ${p1.taka}৳ = ${p1.coins} Coin`, callback_data: `dep_pkg_${id1}`, style: 'primary' });
+function centralSettingsKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '💳 Deposit Channel', callback_data: 'admin_set_dep_chan', style: 'primary' },
+                { text: '📸 Proof Channel', callback_data: 'admin_set_proof_chan', style: 'primary' }
+            ],
+            [
+                { text: '📱 Payment Number', callback_data: 'admin_set_pay_num', style: 'success' },
+                { text: '🪙 Min Task Coin', callback_data: 'admin_set_min_task_reward', style: 'success' }
+            ],
+            [
+                { text: '👥 Referral Bonus', callback_data: 'admin_set_ref_bonus', style: 'primary' },
+                { text: '🎧 Support Link', callback_data: 'admin_set_support_url', style: 'danger' }
+            ]
+        ]
+    };
+}
 
-        if (i + 1 < pkgs.length) {
-            const [id2, p2] = pkgs[i + 1];
-            row.push({ text: `💵 ${p2.taka}৳ = ${p2.coins} Coin`, callback_data: `dep_pkg_${id2}`, style: 'success' });
-        }
-        buttons.push(row);
-    }
-    return { inline_keyboard: buttons };
+function adminManagementKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '➕ Add Admin', callback_data: 'adm_add', style: 'success' },
+                { text: '➖ Remove Admin', callback_data: 'adm_remove', style: 'danger' }
+            ],
+            [
+                { text: '👮 Admin List', callback_data: 'adm_list', style: 'primary' }
+            ]
+        ]
+    };
+}
+
+function balanceControlKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '➕ Add Balance', callback_data: 'bal_add', style: 'success' },
+                { text: '➖ Deduct Balance', callback_data: 'bal_cut', style: 'danger' }
+            ]
+        ]
+    };
+}
+
+// স্ক্রিনশটের হুবহু ডিপোজিট মেথড বাটন
+function getDepositMethodKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '💗 বিকাশ', callback_data: 'dep_method_bkash', style: 'primary' },
+                { text: '💚 নগদ', callback_data: 'dep_method_nagad', style: 'success' }
+            ]
+        ]
+    };
 }
 
 /*
@@ -609,93 +647,83 @@ async function handleUpdate(update) {
         const chatId = callback.message?.chat?.id;
         const messageId = callback.message?.message_id;
 
-        // কঠোর ফোর্স চ্যানেল চেকিং (ভেরিফাই বাটন ব্যতীত)
+        // কঠোর ফোর্স চ্যানেল চেকিং
         if (!isAdmin(fromId) && data !== 'verify_join') {
             const joinedAll = await isUserJoinedAllChannels(fromId);
             if (!joinedAll) {
-                answerCallback(callback.id, "⚠️ Please join all channels first!", true);
+                answerCallback(callback.id, "⚠️ অনুগ্রহ করে আগে সকল চ্যানেলে জয়েন করুন!", true);
                 showForceJoin(fromId, callback.from.first_name);
                 return;
             }
         }
 
-        // চ্যানেল জয়েন ভেরিফিকেশন ও রেফারেল রিওয়ার্ড
+        // চ্যানেল জয়েন ভেরিফিকেশন
         if (data === 'verify_join') {
             answerCallback(callback.id);
             const check = await verifyAndRewardUser(fromId, callback.from);
             if (!check.success) {
                 if (chatId && messageId) deleteMessage(chatId, messageId).catch(() => {});
-                sendMessage(fromId, "⚠️ <b>Please join all channels first!</b>");
+                sendMessage(fromId, "⚠️ <b>আপনি এখনো সবগুলো চ্যানেলে জয়েন করেননি!</b>");
                 showForceJoin(fromId, callback.from.first_name);
                 return;
             }
 
             if (chatId && messageId) deleteMessage(chatId, messageId).catch(() => {});
-            sendMessage(fromId, `✅ <b>Verification Successful!</b>\n\nWelcome to ${escapeHtml(BOT_NAME)}! 🎉`, getUserMenu(fromId));
+            const startText =
+                `🎉 <b>Hello There, ${escapeHtml(callback.from.first_name || 'User')}!</b>\n` +
+                `✨ <b>Welcome To Main Menu</b>`;
+            sendMessage(fromId, startText, getUserMenu(fromId));
             return;
         }
 
-        // --- ডিপোজিট প্যাকেজ সিলেক্ট ---
-        if (data.startsWith('dep_pkg_')) {
+        // --- ডিপোজিট মেথড নির্বাচন (বিকাশ অথবা নগদ) ---
+        if (data === 'dep_method_bkash' || data === 'dep_method_nagad') {
             answerCallback(callback.id);
-            const pkgId = data.replace('dep_pkg_', '');
-            const pkg = cache.packages.get(pkgId);
+            const isBkash = data === 'dep_method_bkash';
+            const methodName = isBkash ? 'বিকাশ' : 'নগদ';
+            const currentPaymentNum = getSetting('payment_number', DEFAULT_PAYMENT_NUMBER);
 
-            if (!pkg) {
-                sendMessage(fromId, "❌ প্যাকেজটি পাওয়া যায়নি!");
-                return;
-            }
-
-            const depositInstructions =
-                `💳 <b>DEPOSIT INSTRUCTIONS</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `📦 <b>প্যাকেজ:</b> ${formatNumber(pkg.taka)}৳ = ${formatNumber(pkg.coins)} Coins\n` +
-                `💵 <b>পাঠাতে হবে:</b> <b>${formatNumber(pkg.taka)} টাকা</b>\n\n` +
-                `📱 <b>বিকাশ ও নগদ (Personal):</b>\n` +
-                `👉 <code>${PAYMENT_NUMBER}</code> <i>(ক্লিক করলে কপি হবে)</i>\n\n` +
-                `⚠️ <b>জরুরি তথ্য:</b>\n` +
-                `• শুধুমাত্র <b>Send Money</b> করবেন।\n` +
-                `• ঠিক <b>${formatNumber(pkg.taka)} টাকা</b> পাঠাবেন।\n` +
-                `• টাকা পাঠানো সম্পন্ন হলে নিচে <b>"পেমেন্ট প্রুফ জমা দিন"</b> বাটনে চাপুন।`;
+            const methodText =
+                `💰 <b>${methodName.toUpperCase()} DEPOSIT</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `📱 <b>${methodName} পার্সোনাল নাম্বার:</b>\n` +
+                `👉 <code>${currentPaymentNum}</code> <i>(নাম্বারে চাপ দিলে কপি হবে)</i>\n\n` +
+                `⚠️ <b>জরুরি নিয়মাবলী:</b>\n` +
+                `• শুধুমাত্র <b>Send Money</b> করতে হবে।\n` +
+                `• সর্বনিম্ন ডিপোজিট: <b>10 টাকা</b>।\n` +
+                `• টাকা পাঠানো সম্পন্ন হলে নিচের <b>"📥 Submit Proof"</b> বাটনে চাপুন।`;
 
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📥 পেমেন্ট প্রুফ জমা দিন', callback_data: `start_dep_proof_${pkgId}`, style: 'success' }]
+                    [{ text: '📥 Submit Proof', callback_data: `start_dep_proof_${isBkash ? 'bkash' : 'nagad'}`, style: 'success' }]
                 ]
             };
 
-            sendMessage(fromId, depositInstructions, keyboard);
+            sendMessage(fromId, methodText, keyboard);
             return;
         }
 
         // --- ডিপোজিট প্রুফ শুরু ---
         if (data.startsWith('start_dep_proof_')) {
             answerCallback(callback.id);
-            const pkgId = data.replace('start_dep_proof_', '');
-            const pkg = cache.packages.get(pkgId);
-
-            if (!pkg) {
-                sendMessage(fromId, "❌ প্যাকেজটি পাওয়া যায়নি!");
-                return;
-            }
+            const methodKey = data.replace('start_dep_proof_', '');
+            const methodName = methodKey === 'bkash' ? 'বিকাশ' : 'নগদ';
 
             cache.userStates.set(fromId, {
-                action: 'dep_step_photo',
-                pkgId: pkgId,
-                taka: pkg.taka,
-                coins: pkg.coins
+                action: 'dep_step_amount',
+                method: methodName
             });
 
             sendMessage(fromId,
-                `📸 <b>ধাপ ১: পেমেন্টের স্ক্রিনশট পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `প্যাকেজ: <b>${pkg.taka}৳ = ${pkg.coins} Coin</b>\n\n` +
-                `সফলভাবে টাকা পাঠানোর স্ক্রিনশটটি <b>Photo</b> হিসেবে ইনবক্সে পাঠান:\n` +
-                `<i>(বাতিল করতে /cancel লিখুন)</i>`,
+                `💵 <b>ধাপ ১: টাকার পরিমাণ লিখুন</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `পেমেন্ট মেথড: <b>${methodName}</b>\n\n` +
+                `আপনি কত টাকা পাঠিয়েছেন তা সংখ্যায় লিখে পাঠান (সর্বনিম্ন ১০ টাকা):\n\n` +
+                `<i>(বাতিল করতে নিচের /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
             return;
         }
 
-        // --- আর্ন কয়েন ক্যাটাগরি ভিউ ---
+        // আর্ন কয়েন ক্যাটাগরি ভিউ
         if (data === 'view_cat_refer' || data === 'view_cat_vote') {
             answerCallback(callback.id);
             const isRefer = data === 'view_cat_refer';
@@ -723,13 +751,13 @@ async function handleUpdate(update) {
 
             sendMessage(fromId,
                 `💰 <b>উপলব্ধ ${isRefer ? 'Bot Refer' : 'Poll Vote'} কাজসমূহ</b>\n` +
-                `<i>(যেগুলোতে বেশি কয়েন দেওয়া হচ্ছে সেগুলো সবার উপরে সাজানো রয়েছে)</i>:\n\nকাজ করতে যেকোনো একটি বেছে নিন:`,
+                `<i>(বেশি কয়েন অফার করা কাজগুলো উপরে সাজানো রয়েছে)</i>:\n\nকাজ করতে যেকোনো একটি বেছে নিন:`,
                 { inline_keyboard: buttons }
             );
             return;
         }
 
-        // --- টাস্ক কাজ শুরু ---
+        // টাস্ক কাজ শুরু
         if (data.startsWith('do_task_')) {
             answerCallback(callback.id);
             const taskId = data.replace('do_task_', '');
@@ -758,13 +786,14 @@ async function handleUpdate(update) {
                 `💰 <b>পুরস্কার:</b> +${formatNumber(task.reward_per_worker)} Coins\n` +
                 `🔗 <b>লিংক:</b> ${escapeHtml(task.link)}\n` +
                 `📝 <b>নিয়মাবলী:</b> ${escapeHtml(task.instructions)}\n\n` +
-                `👉 লিংকে গিয়ে সঠিকভাবে কাজ শেষ করে প্রুফ হিসেবে <b>স্ক্রিনশট (Photo)</b> পাঠান:`;
+                `👉 লিংকে গিয়ে সঠিকভাবে কাজ শেষ করে প্রুফ হিসেবে <b>স্ক্রিনশট (Photo)</b> পাঠান:\n\n` +
+                `<i>(বাতিল করতে নিচের /cancel বাটনে চাপুন)</i>`;
 
             sendMessage(fromId, taskDetailText, getCancelKeyboard());
             return;
         }
 
-        // --- ডিপোজিট অ্যাপ্রুভ / রিজেক্ট ---
+        // ডিপোজিট অ্যাপ্রুভ / রিজেক্ট
         const depMatch = data.match(/^dep_(app|rej)_([A-Za-z0-9_-]+)$/);
         if (depMatch) {
             if (!isAdmin(fromId)) {
@@ -800,13 +829,15 @@ async function handleUpdate(update) {
                 firebaseRequest(`deposits/${depId}`, 'PATCH', { status: 'approved', processed_by: fromId, processed_at: now }).catch(() => {});
 
                 const approvedCaption =
-                    `✅ <b>DEPOSIT APPROVED</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                    `✅ <b>ডিপোজিট অনুমোদিত (APPROVED)</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                     `👤 <b>ইউজার:</b> ${escapeHtml(dep.user_name)} (<code>${dep.user_id}</code>)\n` +
-                    `📦 <b>প্যাকেজ:</b> ${dep.taka}৳ = ${dep.coins} Coins\n` +
+                    `🏦 <b>মেথড:</b> ${escapeHtml(dep.method)}\n` +
+                    `💵 <b>টাকা:</b> ${dep.taka} BDT\n` +
+                    `🪙 <b>কয়েন যোগ:</b> +${dep.coins} Coins\n` +
                     `📱 <b>প্রেরক নাম্বার:</b> <code>${escapeHtml(dep.sender_number)}</code>\n` +
                     `🧾 <b>Trx ID:</b> <code>${escapeHtml(dep.trx_id)}</code>\n` +
-                    `👮 <b>Approved By:</b> ${escapeHtml(adminName)}\n` +
-                    `🕒 <b>সময়:</b> ${formatTimestamp(now)}`;
+                    `👮 <b>অনুমোদনকারী:</b> ${escapeHtml(adminName)}\n` +
+                    `🕒 <b>অনুমোদনের সময়:</b> ${formatTimestamp(now)}`;
 
                 editMessageCaption(chatId, messageId, approvedCaption);
                 return;
@@ -821,19 +852,20 @@ async function handleUpdate(update) {
                 ).catch(() => {});
 
                 const rejectedCaption =
-                    `❌ <b>DEPOSIT REJECTED</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                    `❌ <b>ডিপোজিট বাতিল (REJECTED)</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                     `👤 <b>ইউজার:</b> ${escapeHtml(dep.user_name)} (<code>${dep.user_id}</code>)\n` +
-                    `📦 <b>প্যাকেজ:</b> ${dep.taka}৳ = ${dep.coins} Coins\n` +
+                    `🏦 <b>মেথড:</b> ${escapeHtml(dep.method)}\n` +
+                    `💵 <b>টাকা:</b> ${dep.taka} BDT\n` +
                     `📱 <b>প্রেরক নাম্বার:</b> <code>${escapeHtml(dep.sender_number)}</code>\n` +
                     `🧾 <b>Trx ID:</b> <code>${escapeHtml(dep.trx_id)}</code>\n` +
-                    `👮 <b>Rejected By:</b> ${escapeHtml(adminName)}`;
+                    `👮 <b>বাতিলকারী:</b> ${escapeHtml(adminName)}`;
 
                 editMessageCaption(chatId, messageId, rejectedCaption);
                 return;
             }
         }
 
-        // --- টাস্ক প্রুফ অ্যাপ্রুভ / রিজেক্ট ---
+        // টাস্ক প্রুফ অ্যাপ্রুভ / রিজেক্ট
         const taskProofMatch = data.match(/^tp_(app|rej)_([A-Za-z0-9_-]+)$/);
         if (taskProofMatch) {
             if (!isAdmin(fromId)) {
@@ -875,33 +907,39 @@ async function handleUpdate(update) {
                 firebaseRequest(`task_completions/${sub.task_id}/${sub.worker_id}`, 'PUT', true).catch(() => {});
                 firebaseRequest(`task_submissions/${subId}`, 'PATCH', { status: 'approved', processed_at: now }).catch(() => {});
 
-                editMessageCaption(chatId, messageId, `✅ <b>TASK PROOF APPROVED (+${sub.reward} Coins)</b>`);
+                editMessageCaption(chatId, messageId, `✅ <b>টাস্ক প্রুফ অনুমোদিত (+${sub.reward} Coins যোগ হয়েছে)</b>`);
                 return;
             }
 
             if (action === 'rej') {
                 firebaseRequest(`task_submissions/${subId}`, 'PATCH', { status: 'rejected', processed_at: now }).catch(() => {});
                 sendMessage(sub.worker_id, `❌ <b>টাস্ক প্রুফ বাতিল করা হয়েছে!</b>\nকাজটি যথাযথভাবে সম্পন্ন হয়নি।`).catch(() => {});
-                editMessageCaption(chatId, messageId, `❌ <b>TASK PROOF REJECTED</b>`);
+                editMessageCaption(chatId, messageId, `❌ <b>টাস্ক প্রুফ বাতিল করা হয়েছে</b>`);
                 return;
             }
         }
 
-        // =========================================================================
-        // অ্যাডমিন সেটিংস ও ফোর্স চ্যানেল কলব্যাক
-        // =========================================================================
+        // অ্যাডমিন সেন্ট্রাল সেটিংস ও ম্যানেজমেন্ট কলব্যাক
         if (isAdmin(fromId)) {
             if (data === 'admin_set_dep_chan') {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'cfg_dep_chan' });
-                sendMessage(fromId, "💳 <b>ডিপোজিট চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
+                sendMessage(fromId, "💳 <b>ডিপোজিট চ্যানেল আইডি পাঠান (যেমন: -100...):</b>\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
             if (data === 'admin_set_proof_chan') {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'cfg_proof_chan' });
-                sendMessage(fromId, "📸 <b>টাস্ক প্রুফ চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
+                sendMessage(fromId, "📸 <b>টাস্ক প্রুফ চ্যানেল আইডি পাঠান (যেমন: -100...):</b>\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                return;
+            }
+
+            if (data === 'admin_set_pay_num') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'cfg_pay_num' });
+                const cur = getSetting('payment_number', DEFAULT_PAYMENT_NUMBER);
+                sendMessage(fromId, `📱 <b>বিকাশ ও নগদ পার্সোনাল নাম্বার পরিবর্তন:</b>\nবর্তমান নাম্বার: <code>${cur}</code>\n\nনতুন ১১ ডিজিটের মোবাইল নাম্বার পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
                 return;
             }
 
@@ -909,26 +947,46 @@ async function handleUpdate(update) {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'cfg_min_task_reward' });
                 const cur = getSetting('min_task_reward', 1);
-                sendMessage(fromId, `🪙 <b>টাস্কের মিনিমাম কয়েন রেট সেট করুন:</b>\nবর্তমান: <b>${cur} Coins</b>\n\nনতুন সংখ্যা পাঠান:`, getCancelKeyboard());
+                sendMessage(fromId, `🪙 <b>টাস্ক তৈরির সময় মিনিমাম কয়েন রেট সেট করুন:</b>\nবর্তমান রেট: <b>${cur} Coins</b>\n\nনতুন সংখ্যা পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
                 return;
             }
 
-            // প্যাকেজ রিমুভ কলব্যাক
-            const remPkgMatch = data.match(/^rem_pkg_([A-Za-z0-9_-]+)$/);
-            if (remPkgMatch) {
+            if (data === 'admin_set_ref_bonus') {
                 answerCallback(callback.id);
-                const pkgId = remPkgMatch[1];
-                cache.packages.delete(pkgId);
-                firebaseRequest(`packages/${pkgId}`, 'DELETE').catch(() => {});
-                sendMessage(fromId, "✅ <b>প্যাকেজটি সফলভাবে মুছে ফেলা হয়েছে!</b>", getAdminMenu());
+                cache.adminStates.set(fromId, { action: 'cfg_ref_bonus' });
+                const cur = getSetting('referral_bonus', 2);
+                sendMessage(fromId, `👥 <b>রেফারেল বোনাস পরিবর্তন:</b>\nবর্তমান বোনাস: <b>${cur} Coins</b>\n\nনতুন কয়েনের সংখ্যা পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
                 return;
             }
 
-            // ফোর্স চ্যানেল কলব্যাকসমূহ
+            if (data === 'admin_set_support_url') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'cfg_support_url' });
+                const cur = getSetting('support_url', DEFAULT_SUPPORT_URL);
+                sendMessage(fromId, `🎧 <b>সাপোর্ট লিংক পরিবর্তন:</b>\nবর্তমান লিংক: <code>${cur}</code>\n\nনতুন সাপোর্ট লিংক বা ইউজারনেম পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
+                return;
+            }
+
+            // ব্যালেন্স কন্ট্রোল
+            if (data === 'bal_add') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'balance_add_uid' });
+                sendMessage(fromId, "➕ <b>ব্যালেন্স যোগ করুন</b>\n\nইউজারের Telegram Numeric ID পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                return;
+            }
+
+            if (data === 'bal_cut') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'balance_cut_uid' });
+                sendMessage(fromId, "➖ <b>ব্যালেন্স কাটুন</b>\n\nইউজারের Telegram Numeric ID পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                return;
+            }
+
+            // ফোর্স চ্যানেল
             if (data === 'force_add') {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'add_force_channel_input' });
-                sendMessage(fromId, "➕ <b>ফোর্স চ্যানেল যোগ করুন</b>\n\nচ্যানেলের <b>ID</b> (যেমন: <code>-100...</code>) অথবা <b>Username</b> (যেমন: <code>@mychannel</code> বা লিংক) পাঠান:", getCancelKeyboard());
+                sendMessage(fromId, "➕ <b>ফোর্স চ্যানেল যোগ করুন</b>\n\nচ্যানেলের <b>ID</b> (যেমন: <code>-100...</code>) অথবা <b>Username</b> পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -936,14 +994,14 @@ async function handleUpdate(update) {
                 answerCallback(callback.id);
                 const channels = cache.forceChannels;
                 if (!Object.keys(channels).length) {
-                    sendMessage(fromId, "⚠️ <b>কোনো Channel তালিকায় নেই!</b>");
+                    sendMessage(fromId, "⚠️ <b>কোনো চ্যানেল যুক্ত নেই!</b>");
                     return;
                 }
                 const kb = [];
                 for (const [k, c] of Object.entries(channels)) {
                     if (c) kb.push([{ text: `❌ ${c.channel_name || 'Channel'}`, callback_data: `removeforce_${k}`, style: 'danger' }]);
                 }
-                sendMessage(fromId, "📢 <b>ফোর্স চ্যানেল রিমুভ</b>\n\nChannel নির্বাচন করুন:", { inline_keyboard: kb });
+                sendMessage(fromId, "📢 <b>ফোর্স চ্যানেল রিমুভ</b>\nতালিকা থেকে চ্যানেল নির্বাচন করুন:", { inline_keyboard: kb });
                 return;
             }
 
@@ -953,7 +1011,7 @@ async function handleUpdate(update) {
                 delete cache.forceChannels[removeForceMatch[1]];
                 cache.userChannels.clear();
                 firebaseRequest(`force_channels/${removeForceMatch[1]}`, 'DELETE').catch(() => {});
-                sendMessage(fromId, "✅ <b>চ্যানেল সফলভাবে রিমুভ হয়েছে!</b>", getAdminMenu());
+                sendMessage(fromId, "✅ <b>চ্যানেল সফলভাবে রিমুভ হয়েছে!</b>", getAdminMenu(fromId));
                 return;
             }
 
@@ -991,11 +1049,43 @@ async function handleUpdate(update) {
                 sendLongMessage(fromId, list);
                 return;
             }
+
+            // সুপার এডমিন ম্যানেজমেন্ট
+            if (isSuperAdmin(fromId)) {
+                if (data === 'adm_add') {
+                    answerCallback(callback.id);
+                    cache.adminStates.set(fromId, { action: 'admin_add_uid' });
+                    sendMessage(fromId, "➕ <b>নতুন এডমিন যোগ করুন</b>\n\nইউজারের Telegram Numeric ID পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+
+                if (data === 'adm_remove') {
+                    answerCallback(callback.id);
+                    cache.adminStates.set(fromId, { action: 'admin_remove_uid' });
+                    sendMessage(fromId, "➖ <b>এডমিন রিমুভ করুন</b>\n\nরিমুভ করতে Telegram Numeric ID পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+
+                if (data === 'adm_list') {
+                    answerCallback(callback.id);
+                    let list = `👮 <b>এডমিন তালিকা</b>\n━━━━━━━━━━━━━━━━━━━━\n\n👑 <b>Super Admin:</b> <code>${SUPER_ADMIN_ID}</code>\n\n👮 <b>সাব-এডমিনগণ:</b>\n`;
+                    let has = false;
+                    for (const [aId, a] of Object.entries(cache.admins)) {
+                        if (a?.active) {
+                            has = true;
+                            list += `• <code>${escapeHtml(aId)}</code>\n`;
+                        }
+                    }
+                    if (!has) list += "কোনো অতিরিক্ত সাব-এডমিন নেই।";
+                    sendMessage(fromId, list);
+                    return;
+                }
+            }
         }
     }
 
     // -------------------------------------------------------------
-    // ২. টেক্সট ও ফটো মেসেজ হ্যান্ডলার
+    // ২. টেক্সট ও কমান্ড মেসেজ হ্যান্ডলার
     // -------------------------------------------------------------
     if (update.message) {
         const msg = update.message;
@@ -1033,27 +1123,81 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // 🚨 কঠোর রিয়েল-টাইম ফোর্স চ্যানেল গেট (মেসেজ ফিল্টারিং)
+        // 🛠️ /build কমান্ড হ্যান্ডলার (Developer Information)
         // =========================================================================
+        if (text === '/build') {
+            const devText =
+                `🛠️ <b>Bot Developer:</b> <a href="${DEVELOPER_LINK}">${DEVELOPER_NAME}</a>\n` +
+                `📩 যেকোনো ধরনের বট বানাতে যোগাযোগ করুন।`;
+            const devKb = {
+                inline_keyboard: [
+                    [{ text: '👨‍💻 Contact Developer', url: DEVELOPER_LINK, style: 'primary' }]
+                ]
+            };
+            sendMessage(chatId, devText, devKb);
+            return;
+        }
+
+        // =========================================================================
+        // 🚨 ফোর্স চ্যানেল গেট ও ইনস্ট্যান্ট রেফারেল
+        // =========================================================================
+        const channelCount = Object.values(cache.forceChannels).filter(ch => ch && ch.channel_id).length;
+
         if (!isAdm) {
-            const joinedAll = await isUserJoinedAllChannels(fromId);
-            if (!joinedAll) {
-                if (user.is_verified) {
-                    updateUser(fromId, { is_verified: false });
+            if (channelCount > 0) {
+                const joinedAll = await isUserJoinedAllChannels(fromId);
+                if (!joinedAll) {
+                    if (user.is_verified) {
+                        updateUser(fromId, { is_verified: false });
+                    }
+                    showForceJoin(chatId, msg.from.first_name);
+                    return;
                 }
-                showForceJoin(chatId, msg.from.first_name);
-                return;
+            } else {
+                // কোনো চ্যানেল না থাকলে ক্লিক করলেই ইনস্ট্যান্ট রেফার কাউন্ট
+                if (!user.is_verified || !user.referral_rewarded) {
+                    await verifyAndRewardUser(fromId, msg.from);
+                }
             }
         }
 
         // =========================================================================
-        // ডিপোজিট প্রুফ সাবমিশন (কঠোর ইনপুট ভ্যালিডেশন)
+        // ডিপোজিট প্রুফ সাবমিশন (ধাপে ধাপে ভ্যালিডেশন)
         // =========================================================================
         const uState = cache.userStates.get(fromId);
 
+        // ধাপ ১: টাকার পরিমাণ ইনপুট
+        if (uState?.action === 'dep_step_amount') {
+            if (!isPositiveInt(text) || parseInt(text) < 10) {
+                sendMessage(chatId, "❌ <b>সর্বনিম্ন ডিপোজিট ১০ টাকা!</b> সঠিক সংখ্যা লিখুন (যেমন: 50):\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                return;
+            }
+
+            const amount = parseInt(text);
+            const coins = amount * 2; // প্রতি ১ টাকায় ২ কয়েন (১০ টাকায় ২০ কয়েন)
+
+            cache.userStates.set(fromId, {
+                ...uState,
+                action: 'dep_step_photo',
+                taka: amount,
+                coins: coins
+            });
+
+            sendMessage(chatId,
+                `📸 <b>ধাপ ২: পেমেন্টের স্ক্রিনশট পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `মেথড: <b>${uState.method}</b>\n` +
+                `টাকা: <b>${amount} BDT (${coins} Coins)</b>\n\n` +
+                `টাকা পাঠানোর সফল স্ক্রিনশটটি <b>Photo</b> হিসেবে ইনবক্সে পাঠান:\n\n` +
+                `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
+                getCancelKeyboard()
+            );
+            return;
+        }
+
+        // ধাপ ২: স্ক্রিনশট ফটো চেক
         if (uState?.action === 'dep_step_photo') {
             if (!msg.photo || !msg.photo.length) {
-                sendMessage(chatId, "❌ <b>ভুল ইনপুট!</b> দয়া করে পেমেন্টের সঠিক <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>ভুল ইনপুট!</b> দয়া করে পেমেন্টের সঠিক <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -1065,31 +1209,33 @@ async function handleUpdate(update) {
             });
 
             sendMessage(chatId,
-                `🧾 <b>ধাপ ২: Trx ID পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `বিকাশ/নগদ পেমেন্টের <b>Trx ID (Transaction ID)</b> লিখে পাঠান:\n` +
-                `<i>(উদাহরণ: BLK9827364)</i>`,
+                `🧾 <b>ধাপ ৩: Trx ID পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `পেমেন্টের <b>Trx ID (Transaction ID)</b> লিখে পাঠান:\n` +
+                `<i>(যেমন: BLK9827364)</i>\n\n` +
+                `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
             return;
         }
 
+        // ধাপ ৩: Trx ID চেক
         if (uState?.action === 'dep_step_trx') {
             if (!text || !isValidTrxId(text)) {
-                sendMessage(chatId, "❌ <b>ভুল Trx ID!</b> দয়া করে সঠিক Transaction ID লিখে পাঠান:", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>ভুল Trx ID!</b> দয়া করে সঠিক Transaction ID লিখে পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
             const cleanTrx = text.trim().toUpperCase();
 
             if (cache.usedTrxIds.has(cleanTrx)) {
-                sendMessage(chatId, "❌ <b>এই Trx ID পূর্বে একবার ব্যবহার করা হয়েছে!</b>\nঅনুগ্রহ করে সঠিক Trx ID দিন অথবা /cancel লিখুন:", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>এই Trx ID পূর্বে একবার ব্যবহার করা হয়েছে!</b>\nনতুন ও সঠিক Trx ID দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
             const trxCheck = await firebaseRequest(`used_trxids/${cleanTrx}`);
             if (trxCheck) {
                 cache.usedTrxIds.add(cleanTrx);
-                sendMessage(chatId, "❌ <b>এই Trx ID পূর্বে একবার ব্যবহার করা হয়েছে!</b>\nঅনুগ্রহ করে সঠিক Trx ID দিন অথবা /cancel লিখুন:", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>এই Trx ID পূর্বে একবার ব্যবহার করা হয়েছে!</b>\nনতুন ও সঠিক Trx ID দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -1100,17 +1246,19 @@ async function handleUpdate(update) {
             });
 
             sendMessage(chatId,
-                `📱 <b>ধাপ ৩: প্রেরক নাম্বার পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `যে বিকাশ বা নগদ নাম্বার থেকে টাকা পাঠিয়েছেন, সেই <b>১১ ডিজিটের মোবাইল নাম্বারটি</b> পাঠান:\n` +
-                `<i>(উদাহরণ: 017xxxxxxxx)</i>`,
+                `📱 <b>ধাপ ৪: প্রেরক নাম্বার পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `যে নাম্বার থেকে টাকা পাঠিয়েছেন, সেই <b>১১ ডিজিটের মোবাইল নাম্বারটি</b> পাঠান:\n` +
+                `<i>(যেমন: 017xxxxxxxx)</i>\n\n` +
+                `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
             return;
         }
 
+        // ধাপ ৪: প্রেরক নাম্বার ভ্যালিডেশন
         if (uState?.action === 'dep_step_phone') {
             if (!text || !isValidBDPhone(text)) {
-                sendMessage(chatId, "❌ <b>ভুল মোবাইল নাম্বার!</b> দয়া করে সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার লিখুন (যেমন: <code>017xxxxxxxx</code>):", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>ভুল মোবাইল নাম্বার!</b> দয়া করে সঠিক ১১ ডিজিটের মোবাইল নাম্বার লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -1123,7 +1271,7 @@ async function handleUpdate(update) {
                 user_id: fromId,
                 user_name: msg.from.first_name || 'User',
                 user_username: msg.from.username ? `@${msg.from.username}` : '',
-                pkg_id: uState.pkgId,
+                method: uState.method,
                 taka: uState.taka,
                 coins: uState.coins,
                 file_id: uState.file_id,
@@ -1140,13 +1288,13 @@ async function handleUpdate(update) {
             cache.userStates.delete(fromId);
 
             const channelCaption =
-                `🔔 <b>NEW DEPOSIT SUBMITTED!</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `🔔 <b>নতুন ডিপোজিট রিকোয়েস্ট!</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `👤 <b>ইউজার:</b> ${escapeHtml(depData.user_name)} (<code>${depData.user_id}</code>)\n` +
                 `🔗 <b>ইউজারনেম:</b> ${escapeHtml(depData.user_username || 'N/A')}\n\n` +
-                `📦 <b>প্যাকেজ:</b> ${depData.taka}৳ = ${depData.coins} Coins\n` +
-                `💵 <b>টাকা:</b> <b>${depData.taka} BDT</b>\n` +
+                `🏦 <b>মেথড:</b> ${escapeHtml(depData.method)}\n` +
+                `💵 <b>টাকার পরিমাণ:</b> <b>${depData.taka} BDT</b>\n` +
                 `🪙 <b>পাবে:</b> <b>${depData.coins} Coins</b>\n\n` +
-                `📱 <b>প্রেরক নাম্বার:</b> <code>${escapeHtml(senderNumber)}</code>\n` +
+                `📱 <b>টাকা পাঠানো নাম্বার:</b> <code>${escapeHtml(senderNumber)}</code>\n` +
                 `🧾 <b>Trx ID:</b> <code>${escapeHtml(depData.trx_id)}</code>\n` +
                 `🕒 <b>সময়:</b> ${formatTimestamp(depData.created_at)}`;
 
@@ -1163,7 +1311,8 @@ async function handleUpdate(update) {
 
             sendMessage(chatId,
                 `✅ <b>আপনার পেমেন্ট প্রুফ জমা হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `📦 প্যাকেজ: <b>${depData.taka}৳ = ${depData.coins} Coins</b>\n` +
+                `🏦 মেথড: <b>${depData.method}</b>\n` +
+                `💵 পরিমাণ: <b>${depData.taka} BDT (${depData.coins} Coins)</b>\n` +
                 `🧾 Trx ID: <code>${depData.trx_id}</code>\n` +
                 `📱 প্রেরক নাম্বার: <code>${senderNumber}</code>\n\n` +
                 `⏳ আপনার রিকোয়েস্টটি বর্তমানে <b>পেন্ডিং (Pending)</b> রয়েছে। এডমিন ভেরিফাই করে এপ্রুভ করলেই ব্যালেন্সে কয়েন যুক্ত হয়ে যাবে।`,
@@ -1173,27 +1322,28 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // টাস্ক তৈরির ফ্লো (Bot Refer ও Poll Vote এর আলাদা নিয়মাবলী প্রম্পট)
+        // টাস্ক তৈরির ফ্লো
         // =========================================================================
         if (uState?.action === 'create_task_link') {
             if (!text || !isValidURL(text)) {
-                sendMessage(chatId, "❌ <b>ভুল লিংক!</b> দয়া করে সঠিক লিংক পাঠান (যেমন: <code>https://t.me/...</code>):", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>ভুল লিংক!</b> দয়া করে সঠিক লিংক পাঠান (যেমন: <code>https://t.me/...</code>):\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
             cache.userStates.set(fromId, { ...uState, action: 'create_task_rules', link: text.trim() });
 
-            // টাস্কের ধরন অনুযায়ী আলাদা নিয়ম প্রদর্শন
             if (uState.taskType === 'bot_refer') {
                 sendMessage(chatId,
                     `📝 <b>কাজের নিয়মাবলী লিখে পাঠান:</b>\n` +
-                    `<i>(যেমন: বটে স্টার্ট দিয়ে চ্যানেল জয়েন করুন)</i>`,
+                    `<i>(যেমন: বটে স্টার্ট দিয়ে চ্যানেল জয়েন করুন)</i>\n\n` +
+                    `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                     getCancelKeyboard()
                 );
             } else {
                 sendMessage(chatId,
                     `📝 <b>কাজের নিয়মাবলী লিখে পাঠান:</b>\n` +
-                    `<i>(যেমন: SΛKIB 〆 DΞVΞLOPΞR কে ভোট দিন)</i>`,
+                    `<i>(যেমন: SΛKIB 〆 DΞVΞLOPΞR কে ভোট দিন)</i>\n\n` +
+                    `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                     getCancelKeyboard()
                 );
             }
@@ -1202,18 +1352,18 @@ async function handleUpdate(update) {
 
         if (uState?.action === 'create_task_rules') {
             if (!text || text.length < 3) {
-                sendMessage(chatId, "❌ দয়া করে কাজের নিয়ম স্পষ্টভাবে লিখে পাঠান:", getCancelKeyboard());
+                sendMessage(chatId, "❌ দয়া করে কাজের নিয়মাবলী স্পষ্টভাবে লিখে পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
             cache.userStates.set(fromId, { ...uState, action: 'create_task_qty', rules: text.trim() });
-            sendMessage(chatId, "🎯 <b>কতটি রেফার বা ভোট প্রয়োজন? সংখ্যা লিখুন:</b>", getCancelKeyboard());
+            sendMessage(chatId, "🎯 <b>কতটি রেফার বা ভোট প্রয়োজন? সংখ্যা লিখুন:</b>\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
             return;
         }
 
         if (uState?.action === 'create_task_qty') {
             if (!isPositiveInt(text)) {
-                sendMessage(chatId, "❌ <b>ভুল সংখ্যা!</b> দয়া করে সঠিক পূর্ণসংখ্যা লিখুন (যেমন: 10):", getCancelKeyboard());
+                sendMessage(chatId, "❌ <b>ভুল সংখ্যা!</b> দয়া করে সঠিক পূর্ণসংখ্যা লিখুন (যেমন: 10):\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -1224,7 +1374,8 @@ async function handleUpdate(update) {
                 `🪙 <b>প্রতি কাজের জন্য কত কয়েন দিতে চান?</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                 `⚠️ <b>মিনিমাম রেট:</b> ${minReward} Coin\n\n` +
                 `💡 <i>নোট: আপনি যত বেশি কয়েন অফার করবেন, আপনার কাজটি তত উপরে শো করবে এবং মেম্বাররা সবার আগে আপনার কাজ সম্পন্ন করবে!</i>\n\n` +
-                `কয়েনের সংখ্যা লিখুন:`,
+                `কয়েনের সংখ্যা লিখুন:\n\n` +
+                `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
             return;
@@ -1233,7 +1384,7 @@ async function handleUpdate(update) {
         if (uState?.action === 'create_task_reward') {
             const minReward = Number(getSetting('min_task_reward', 1));
             if (!isPositiveInt(text) || parseInt(text) < minReward) {
-                sendMessage(chatId, `❌ প্রতি কাজের জন্য কমপক্ষে <b>${minReward} Coin</b> দিতে হবে। সঠিক সংখ্যা লিখুন:`, getCancelKeyboard());
+                sendMessage(chatId, `❌ প্রতি কাজের জন্য কমপক্ষে <b>${minReward} Coin</b> দিতে হবে। সঠিক সংখ্যা লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
                 return;
             }
 
@@ -1275,7 +1426,7 @@ async function handleUpdate(update) {
             cache.userStates.delete(fromId);
 
             sendMessage(chatId,
-                `🎉 <b>টাস্ক সফলভাবে পাবলিশ হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `🎉 <b>টাস্ক সফলভাবে তৈরি হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                 `🆔 <b>টাস্ক আইডি:</b> <code>#${taskId}</code>\n` +
                 `🎯 <b>টার্গেট:</b> ${uState.qty} টি\n` +
                 `💰 <b>প্রতি কাজের রেট:</b> ${rewardPerTask} Coins\n` +
@@ -1291,7 +1442,7 @@ async function handleUpdate(update) {
         // =========================================================================
         if (uState?.action === 'task_step_photo') {
             if (!msg.photo || !msg.photo.length) {
-                sendMessage(chatId, "❌ দয়া করে কাজের সফলতার <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:", getCancelKeyboard());
+                sendMessage(chatId, "❌ দয়া করে কাজের সফলতার <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                 return;
             }
 
@@ -1314,11 +1465,11 @@ async function handleUpdate(update) {
             cache.userStates.delete(fromId);
 
             const caption =
-                `🔔 <b>NEW TASK PROOF!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `🔔 <b>নতুন টাস্ক প্রুফ জমা হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                 `👤 <b>ওয়ার্কার:</b> ${escapeHtml(subData.worker_name)} (<code>${fromId}</code>)\n` +
                 `📌 <b>টাস্ক আইডি:</b> <code>#${subData.task_id}</code>\n` +
                 `💰 <b>রিওয়ার্ড:</b> ${subData.reward} Coins\n\n` +
-                `অ্যাডমিন স্ক্রিনশট যাচাই করে সিদ্ধান্ত দিন:`;
+                `স্ক্রিনশট যাচাই করে সিদ্ধান্ত দিন:`;
 
             const adminKb = {
                 inline_keyboard: [
@@ -1341,72 +1492,77 @@ async function handleUpdate(update) {
         if (isAdm) {
             const aState = cache.adminStates.get(fromId);
 
-            if (aState?.action === 'pkg_add_taka' && text) {
-                if (!isPositiveInt(text)) {
-                    sendMessage(chatId, "❌ সঠিক টাকার পরিমাণ (সংখ্যা) লিখুন:", getCancelKeyboard());
-                    return;
-                }
-                cache.adminStates.set(fromId, { action: 'pkg_add_coins', taka: parseInt(text) });
-                sendMessage(chatId, `💰 <b>${text} টাকায় কত কয়েন দিতে চান? কয়েনের সংখ্যা লিখুন:</b>`, getCancelKeyboard());
-                return;
-            }
-
-            if (aState?.action === 'pkg_add_coins' && text) {
-                if (!isPositiveInt(text)) {
-                    sendMessage(chatId, "❌ সঠিক কয়েনের পরিমাণ (সংখ্যা) লিখুন:", getCancelKeyboard());
-                    return;
-                }
-                const coins = parseInt(text);
-                const pkgId = `pkg_${Date.now()}`;
-                const newPkg = { id: pkgId, taka: aState.taka, coins: coins };
-
-                cache.packages.set(pkgId, newPkg);
-                firebaseRequest(`packages/${pkgId}`, 'PUT', newPkg).catch(() => {});
-                cache.adminStates.delete(fromId);
-
-                sendMessage(chatId, `✅ <b>নতুন প্যাকেজ সফলভাবে যুক্ত হয়েছে!</b>\n💵 <b>${newPkg.taka}৳ = ${newPkg.coins} Coins</b>`, getAdminMenu());
-                return;
-            }
-
             if (aState?.action === 'cfg_dep_chan' && text) {
                 setSetting('deposit_channel_id', text.trim());
                 cache.adminStates.delete(fromId);
-                sendMessage(chatId, `✅ <b>ডিপোজিট চ্যানেল আইডি আপডেট হয়েছে:</b> <code>${text.trim()}</code>`, getAdminMenu());
+                sendMessage(chatId, `✅ <b>ডিপোজিট চ্যানেল আইডি আপডেট হয়েছে:</b> <code>${text.trim()}</code>`, getAdminMenu(fromId));
                 return;
             }
 
             if (aState?.action === 'cfg_proof_chan' && text) {
                 setSetting('task_proof_channel_id', text.trim());
                 cache.adminStates.delete(fromId);
-                sendMessage(chatId, `✅ <b>টাস্ক প্রুফ চ্যানেল আইডি আপডেট হয়েছে:</b> <code>${text.trim()}</code>`, getAdminMenu());
+                sendMessage(chatId, `✅ <b>টাস্ক প্রুফ চ্যানেল আইডি আপডেট হয়েছে:</b> <code>${text.trim()}</code>`, getAdminMenu(fromId));
+                return;
+            }
+
+            if (aState?.action === 'cfg_pay_num' && text) {
+                if (!isValidBDPhone(text)) {
+                    sendMessage(chatId, "❌ সঠিক ১১ ডিজিটের মোবাইল নাম্বার লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                const cleanPhone = text.replace(/[^0-9]/g, '');
+                setSetting('payment_number', cleanPhone);
+                cache.adminStates.delete(fromId);
+                sendMessage(chatId, `✅ <b>পেমেন্ট নাম্বার সফলভাবে পরিবর্তন করা হয়েছে:</b> <code>${cleanPhone}</code>`, getAdminMenu(fromId));
                 return;
             }
 
             if (aState?.action === 'cfg_min_task_reward' && text) {
                 if (!isPositiveInt(text)) {
-                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:", getCancelKeyboard());
+                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                     return;
                 }
                 setSetting('min_task_reward', parseInt(text));
                 cache.adminStates.delete(fromId);
-                sendMessage(chatId, `✅ <b>টাস্কের মিনিমাম কয়েন রেট সেট হয়েছে: ${text} Coins</b>`, getAdminMenu());
+                sendMessage(chatId, `✅ <b>টাস্কের মিনিমাম কয়েন রেট সেট হয়েছে: ${text} Coins</b>`, getAdminMenu(fromId));
+                return;
+            }
+
+            if (aState?.action === 'cfg_ref_bonus' && text) {
+                if (!isPositiveInt(text)) {
+                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                setSetting('referral_bonus', parseInt(text));
+                cache.adminStates.delete(fromId);
+                sendMessage(chatId, `✅ <b>রেফারেল বোনাস আপডেট হয়েছে: ${text} Coins</b>`, getAdminMenu(fromId));
+                return;
+            }
+
+            if (aState?.action === 'cfg_support_url' && text) {
+                let link = text.trim();
+                if (link.startsWith('@')) link = 'https://t.me/' + link.slice(1);
+                setSetting('support_url', link);
+                cache.adminStates.delete(fromId);
+                sendMessage(chatId, `✅ <b>সাপোর্ট লিংক আপডেট হয়েছে:</b> <code>${link}</code>`, getAdminMenu(fromId));
                 return;
             }
 
             if (aState?.action === 'balance_add_uid' && text) {
                 const target = await getUser(text.trim());
                 if (!target) {
-                    sendMessage(chatId, "❌ ইউজার পাওয়া যায়নি!", getCancelKeyboard());
+                    sendMessage(chatId, "❌ ইউজার পাওয়া যায়নি!\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                     return;
                 }
                 cache.adminStates.set(fromId, { action: 'balance_add_amt', uid: text.trim() });
-                sendMessage(chatId, `👤 <b>ইউজার:</b> ${escapeHtml(target.first_name)}\n💰 বর্তমান ব্যালেন্স: ${target.balance || 0} Coins\n\nকত কয়েন যোগ করতে চান?`, getCancelKeyboard());
+                sendMessage(chatId, `👤 <b>ইউজার:</b> ${escapeHtml(target.first_name)}\n💰 বর্তমান ব্যালেন্স: ${target.balance || 0} Coins\n\nকত কয়েন যোগ করতে চান?\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
                 return;
             }
 
             if (aState?.action === 'balance_add_amt' && text) {
                 if (!isPositiveInt(text)) {
-                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:", getCancelKeyboard());
+                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
                     return;
                 }
                 const amt = parseInt(text);
@@ -1415,13 +1571,40 @@ async function handleUpdate(update) {
                     const newBal = Number(target.balance || 0) + amt;
                     updateUser(aState.uid, { balance: newBal });
                     cache.adminStates.delete(fromId);
-                    sendMessage(chatId, `✅ <b>+${amt} Coins যোগ করা হয়েছে!</b>\nনতুন ব্যালেন্স: ${newBal} Coins`, getAdminMenu());
+                    sendMessage(chatId, `✅ <b>+${amt} Coins যোগ করা হয়েছে!</b>\nনতুন ব্যালেন্স: ${newBal} Coins`, getAdminMenu(fromId));
                     sendMessage(aState.uid, `🎁 <b>এডমিন আপনার একাউন্টে +${amt} Coins যোগ করেছেন!</b>\nবর্তমান ব্যালেন্স: ${newBal} Coins`).catch(() => {});
                 }
                 return;
             }
 
-            // ফোর্স চ্যানেল ইনপুট
+            if (aState?.action === 'balance_cut_uid' && text) {
+                const target = await getUser(text.trim());
+                if (!target) {
+                    sendMessage(chatId, "❌ ইউজার পাওয়া যায়নি!\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                cache.adminStates.set(fromId, { action: 'balance_cut_amt', uid: text.trim() });
+                sendMessage(chatId, `👤 <b>ইউজার:</b> ${escapeHtml(target.first_name)}\n💰 বর্তমান ব্যালেন্স: ${target.balance || 0} Coins\n\nকত কয়েন কাটতে চান?\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
+                return;
+            }
+
+            if (aState?.action === 'balance_cut_amt' && text) {
+                if (!isPositiveInt(text)) {
+                    sendMessage(chatId, "❌ সঠিক সংখ্যা দিন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                const amt = parseInt(text);
+                const target = await getUser(aState.uid);
+                if (target) {
+                    const newBal = Math.max(0, Number(target.balance || 0) - amt);
+                    updateUser(aState.uid, { balance: newBal });
+                    cache.adminStates.delete(fromId);
+                    sendMessage(chatId, `✅ <b>-${amt} Coins কাটা হয়েছে!</b>\nনতুন ব্যালেন্স: ${newBal} Coins`, getAdminMenu(fromId));
+                    sendMessage(aState.uid, `⚠️ <b>এডমিন আপনার একাউন্ট থেকে -${amt} Coins কর্তন করেছেন!</b>\nবর্তমান ব্যালেন্স: ${newBal} Coins`).catch(() => {});
+                }
+                return;
+            }
+
             if (aState?.action === 'add_force_channel_input') {
                 sendMessage(chatId, "🔍 চ্যানেল এবং পারমিশন ভেরিফাই করা হচ্ছে...");
                 const check = await verifyChannelAndBotAdmin(text);
@@ -1455,21 +1638,47 @@ async function handleUpdate(update) {
                 cache.userChannels.clear();
                 firebaseRequest(`force_channels/${newKey}`, 'PUT', chObj).catch(() => {});
                 cache.adminStates.delete(fromId);
-                sendMessage(chatId, `🎉 <b>Force Join Channel Added Successfully!</b>\n\n📢 <b>${escapeHtml(btnName)}</b>`, getAdminMenu());
+                sendMessage(chatId, `🎉 <b>ফোর্স চ্যানেল সফলভাবে যুক্ত হয়েছে!</b>\n\n📢 <b>${escapeHtml(btnName)}</b>`, getAdminMenu(fromId));
                 return;
+            }
+
+            if (isSuperAdmin(fromId)) {
+                if (aState?.action === 'admin_add_uid' && text) {
+                    if (/^\d+$/.test(text.trim())) {
+                        const targetUid = text.trim();
+                        cache.admins[targetUid] = { active: true, added_by: fromId, added_at: Math.floor(Date.now() / 1000) };
+                        firebaseRequest(`admins/${targetUid}`, 'PUT', cache.admins[targetUid]).catch(() => {});
+                        cache.adminStates.delete(fromId);
+                        sendMessage(chatId, `🎉 <b>নতুন সাব-এডমিন সফলভাবে যুক্ত করা হয়েছে!</b>\n🆔 <code>${targetUid}</code>`, getAdminMenu(fromId));
+                    } else {
+                        sendMessage(chatId, "❌ সঠিক Numeric User ID পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    }
+                    return;
+                }
+
+                if (aState?.action === 'admin_remove_uid' && text) {
+                    const targetUid = text.trim();
+                    if (/^\d+$/.test(targetUid) && !isSuperAdmin(targetUid)) {
+                        delete cache.admins[targetUid];
+                        firebaseRequest(`admins/${targetUid}`, 'DELETE').catch(() => {});
+                        cache.adminStates.delete(fromId);
+                        sendMessage(chatId, `✅ <b>এডমিন সফলভাবে রিমুভ করা হয়েছে!</b>\n🆔 <code>${targetUid}</code>`, getAdminMenu(fromId));
+                    } else {
+                        sendMessage(chatId, "❌ সুপার এডমিন রিমুভ করা যাবে না অথবা আইডি সঠিক নয়:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    }
+                    return;
+                }
             }
         }
 
         // =========================================================================
-        // সাধারণ ইউজার মেনু বাটনসমূহ (ইংলিশ লেবেল)
+        // সাধারণ ইউজার মেনু বাটনসমূহ
         // =========================================================================
         if (text === '/start' || text.startsWith('/start')) {
-            sendMessage(chatId,
-                `👋 <b>Welcome ${escapeHtml(msg.from.first_name || 'User')}!</b>\n\n` +
-                `Earn coins by completing simple tasks or promote your own Bot Referrals & Poll Votes.\n` +
-                `Use the buttons below to get started:`,
-                getUserMenu(fromId)
-            );
+            const startText =
+                `🎉 <b>Hello There, ${escapeHtml(msg.from.first_name || 'User')}!</b>\n` +
+                `✨ <b>Welcome To Main Menu</b>`;
+            sendMessage(chatId, startText, getUserMenu(fromId));
             return;
         }
 
@@ -1482,20 +1691,19 @@ async function handleUpdate(update) {
                     ]
                 ]
             };
-            sendMessage(chatId, "💰 <b>Earn Coins Section</b>\nSelect the task category you want to complete:", kb);
+            sendMessage(chatId, "💰 <b>আর্ন কয়েন সেকশন</b>\nআপনি কোন ধরনের কাজ সম্পন্ন করে কয়েন আয় করতে চান? নিচে থেকে নির্বাচন করুন:", kb);
             return;
         }
 
+        // স্ক্রিনশটের হুবহু ডিপোজিট ফরম্যাট
         if (text === '💳 Deposit') {
-            if (!cache.packages.size) {
-                sendMessage(chatId, "⚠️ বর্তমানে কোনো ডিপোজিট প্যাকেজ নেই। কিছুক্ষণ পর চেষ্টা করুন।");
-                return;
-            }
-            sendMessage(chatId,
-                `💳 <b>কয়েন ডিপোজিট প্যাকেজ</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `কয়েন কিনতে নিচের প্যাকেজগুলো থেকে নির্বাচন করুন:`,
-                getDepositPackagesKeyboard()
-            );
+            const depText =
+                `💰 <b>DEPOSIT</b>\n\n` +
+                `⭐️ Point কিনতে নিচের Payment Method নির্বাচন করুন।\n\n` +
+                `💗 বিকাশ অথবা 💚 নগদ নির্বাচন করুন।\n\n` +
+                `⚠️ <b>Minimum Deposit:</b> 10 টাকা`;
+
+            sendMessage(chatId, depText, getDepositMethodKeyboard());
             return;
         }
 
@@ -1508,16 +1716,17 @@ async function handleUpdate(update) {
 
             sendMessage(chatId,
                 `🚀 <b>${isRefer ? 'Bot Refer' : 'Poll Vote'} অর্ডার</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `যে ${isRefer ? 'বটের রেফারেল লিংক' : 'চ্যানেলের পোল পোস্ট লিংক'} প্রচার করতে চান, সেই <b>লিংকটি পাঠান:</b>`,
+                `যে ${isRefer ? 'বটের রেফারেল লিংক' : 'চ্যানেলের পোল পোস্ট লিংক'} প্রচার করতে চান, সেই <b>লিংকটি পাঠান:</b>\n\n` +
+                `<i>(বাতিল করতে নিচের /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
             return;
         }
 
         if (text === '📜 My Tasks') {
-            sendMessage(chatId, "🔍 <i>Loading your tasks...</i>");
+            sendMessage(chatId, "🔍 <i>আপনার কাজের তালিকা লোড হচ্ছে...</i>");
             const all = await firebaseRequest('tasks');
-            let out = `📜 <b>YOUR ORDERED TASKS</b>\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+            let out = `📜 <b>আপনার অর্ডার করা কাজের তালিকা</b>\n━━━━━━━━━━━━━━━━━━━━\n\n`;
             let has = false;
 
             if (all && typeof all === 'object') {
@@ -1525,19 +1734,19 @@ async function handleUpdate(update) {
                     if (t && String(t.creator_id) === fromId) {
                         has = true;
                         const remaining = Math.max(0, Number(t.total_needed) - Number(t.completed_count || 0));
-                        out += `📋 <b>Task ID:</b> <code>#${t.task_id}</code>\n` +
-                            `📌 Type: ${t.type === 'bot_refer' ? '📢 Bot Refer' : '📦 Poll Vote'}\n` +
-                            `🎯 Target: <b>${t.total_needed}</b>\n` +
-                            `✅ Completed: <b>${t.completed_count || 0}</b>\n` +
-                            `⏳ Remaining: <b>${remaining}</b>\n` +
-                            `💰 Rate: <b>${t.reward_per_worker} Coins/task</b>\n` +
-                            `📊 Status: <b>${t.status.toUpperCase()}</b>\n` +
+                        out += `📋 <b>টাস্ক আইডি:</b> <code>#${t.task_id}</code>\n` +
+                            `📌 ধরন: ${t.type === 'bot_refer' ? '📢 Bot Refer' : '📦 Poll Vote'}\n` +
+                            `🎯 টার্গেট: <b>${t.total_needed} টি</b>\n` +
+                            `✅ পূরণ হয়েছে: <b>${t.completed_count || 0} টি</b>\n` +
+                            `⏳ বাকি আছে: <b>${remaining} টি</b>\n` +
+                            `💰 রেট: <b>${t.reward_per_worker} Coins/কাজ</b>\n` +
+                            `📊 স্ট্যাটাস: <b>${t.status.toUpperCase()}</b>\n` +
                             `━━━━━━━━━━━━━━━━━━━━\n`;
                     }
                 }
             }
 
-            if (!has) out += "❌ You have not created any tasks yet.";
+            if (!has) out += "❌ আপনি এখনো কোনো কাজ অর্ডার করেননি।";
             sendMessage(chatId, out, getUserMenu(fromId));
             return;
         }
@@ -1545,12 +1754,12 @@ async function handleUpdate(update) {
         if (text === '👤 Profile') {
             const u = await getUser(fromId);
             const prof =
-                `👤 <b>YOUR PROFILE</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `🆔 <b>ID:</b> <code>${fromId}</code>\n` +
-                `👤 <b>Name:</b> ${escapeHtml(msg.from.first_name || 'User')}\n` +
-                `🔗 <b>Username:</b> ${msg.from.username ? `@${msg.from.username}` : 'N/A'}\n\n` +
-                `💰 <b>Balance:</b> <b>${formatNumber(u?.balance || 0)} Coins</b>\n` +
-                `👥 <b>Total Referrals:</b> ${u?.total_referrals || 0} Users`;
+                `👤 <b>আপনার প্রোফাইল তথ্য</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `🆔 <b>আইডি:</b> <code>${fromId}</code>\n` +
+                `👤 <b>নাম:</b> ${escapeHtml(msg.from.first_name || 'User')}\n` +
+                `🔗 <b>ইউজারনেম:</b> ${msg.from.username ? `@${msg.from.username}` : 'N/A'}\n\n` +
+                `💰 <b>ব্যালেন্স:</b> <b>${formatNumber(u?.balance || 0)} Coins</b>\n` +
+                `👥 <b>মোট রেফারেল:</b> ${u?.total_referrals || 0} জন`;
             sendMessage(chatId, prof, getUserMenu(fromId));
             return;
         }
@@ -1559,17 +1768,17 @@ async function handleUpdate(update) {
             const link = `https://t.me/${BOT_USERNAME}?start=${fromId}`;
             const bonus = getSetting('referral_bonus', 2);
             const refText =
-                `📮 <b>Refer & Earn Program</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `Share your invite link with friends and earn free coins!\n\n` +
-                `🎁 <b>Reward:</b> ${bonus} Coins per verified referral\n\n` +
-                `🔗 <b>Your Referral Link:</b>\n<code>${link}</code>\n\n` +
-                `<i>⚠️ Note: Referrals count only after channels are verified!</i>`;
+                `📮 <b>রেফারেল প্রোগ্রাম</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `আপনার রেফারেল লিংক শেয়ার করে বন্ধুদের ইনভাইট করুন এবং ফ্রি কয়েন আয় করুন!\n\n` +
+                `🎁 <b>প্রতি সফল রেফারে পাবেন:</b> ${bonus} Coins\n\n` +
+                `🔗 <b>আপনার ইনভাইট লিংক:</b>\n<code>${link}</code>`;
             sendMessage(chatId, refText, getUserMenu(fromId));
             return;
         }
 
         if (text === '💬 Support') {
-            sendMessage(chatId, `💬 <b>Support Center</b>\n\nNeed help? Contact our support administrator:\n👉 ${DEFAULT_SUPPORT_URL}`);
+            const supportUrl = getSetting('support_url', DEFAULT_SUPPORT_URL);
+            sendMessage(chatId, `💬 <b>সাপোর্ট সেন্টার</b>\n\nযেকোনো প্রশ্ন বা সমস্যায় সরাসরি যোগাযোগ করুন:\n👉 ${supportUrl}`);
             return;
         }
 
@@ -1577,67 +1786,33 @@ async function handleUpdate(update) {
         // অ্যাডমিন মেনু বাটনসমূহ
         // =========================================================================
         if (text === '🛠 Admin Panel' && isAdm) {
-            sendMessage(chatId, "🛠 <b>Admin Control Panel Activated</b>", getAdminMenu());
-            return;
-        }
-
-        if (text === '➕ Add Package' && isAdm) {
-            cache.adminStates.set(fromId, { action: 'pkg_add_taka' });
-            sendMessage(chatId, "➕ <b>নতুন প্যাকেজ তৈরি</b>\n\nপ্রথমে টাকার পরিমাণ (BDT) লিখুন:\n<i>(যেমন: 20)</i>", getCancelKeyboard());
-            return;
-        }
-
-        if (text === '➖ Remove Package' && isAdm) {
-            if (!cache.packages.size) {
-                sendMessage(chatId, "⚠️ কোনো প্যাকেজ নেই!");
-                return;
-            }
-            const kb = [];
-            for (const [id, p] of cache.packages) {
-                kb.push([{ text: `❌ ${p.taka}৳ = ${p.coins} Coins`, callback_data: `rem_pkg_${id}`, style: 'danger' }]);
-            }
-            sendMessage(chatId, "🗑 <b>যে প্যাকেজটি ডিলিট করতে চান নির্বাচন করুন:</b>", { inline_keyboard: kb });
-            return;
-        }
-
-        if (text === '📋 Package List' && isAdm) {
-            let list = "📋 <b>বর্তমান ডিপোজিট প্যাকেজসমূহ:</b>\n━━━━━━━━━━━━━━━━━━━━\n";
-            if (!cache.packages.size) list += "কোনো প্যাকেজ নেই।";
-            else {
-                for (const [, p] of cache.packages) {
-                    list += `• <b>${p.taka} BDT = ${p.coins} Coins</b>\n`;
-                }
-            }
-            sendMessage(chatId, list, getAdminMenu());
+            sendMessage(chatId, "🛠 <b>এডমিন কন্ট্রোল সেন্টার চালু হয়েছে</b>", getAdminMenu(fromId));
             return;
         }
 
         if (text === '📢 Force Channels' && isAdm) {
             const count = Object.keys(cache.forceChannels).length;
-            sendMessage(chatId, `📢 <b>FORCE JOIN CHANNELS</b>\n\nমোট চ্যানেল: <b>${count}</b> টি`, forceJoinKeyboard());
+            sendMessage(chatId, `📢 <b>ফোর্স জয়েন চ্যানেল নিয়ন্ত্রণ</b>\n\nমোট চ্যানেল: <b>${count}</b> টি`, forceJoinKeyboard());
             return;
         }
 
         if (text === '⚙️ Central Settings' && isAdm) {
-            const kb = {
-                inline_keyboard: [
-                    [{ text: '💳 ডিপোজিট চ্যানেল সেট', callback_data: 'admin_set_dep_chan', style: 'primary' }],
-                    [{ text: '📸 টাস্ক প্রুফ চ্যানেল সেট', callback_data: 'admin_set_proof_chan', style: 'primary' }],
-                    [{ text: '🪙 মিনিমাম টাস্ক কয়েন রেট', callback_data: 'admin_set_min_task_reward', style: 'success' }]
-                ]
-            };
-            sendMessage(chatId, "⚙️ <b>সেন্ট্রাল সেটিংস কনফিগারেশন:</b>", kb);
+            sendMessage(chatId, "⚙️ <b>সেন্ট্রাল সেটিংস কনফিগারেশন:</b>\nনিচে থেকে যেকোনো সেটিং পরিবর্তন করুন:", centralSettingsKeyboard());
             return;
         }
 
         if (text === '👥 Balance Control' && isAdm) {
-            cache.adminStates.set(fromId, { action: 'balance_add_uid' });
-            sendMessage(chatId, "👥 <b>ব্যালেন্স যোগ করুন</b>\n\nইউজারের Telegram Numeric ID পাঠান:", getCancelKeyboard());
+            sendMessage(chatId, "👥 <b>ব্যালেন্স কন্ট্রোল সেন্টার:</b>\nনিচে থেকে অপশন বেছে নিন:", balanceControlKeyboard());
+            return;
+        }
+
+        if (text === '👮 Admin Management' && isSuperAdmin(fromId)) {
+            sendMessage(chatId, "👮 <b>এডমিন ম্যানেজমেন্ট কন্ট্রোল:</b>", adminManagementKeyboard());
             return;
         }
 
         if (text === '🔙 Back to User Panel') {
-            sendMessage(chatId, "👤 <b>User Menu</b>", getUserMenu(fromId));
+            sendMessage(chatId, "👤 <b>ইউজার মেনু চালু হয়েছে</b>", getUserMenu(fromId));
             return;
         }
     }
@@ -1645,33 +1820,22 @@ async function handleUpdate(update) {
 
 /*
 |--------------------------------------------------------------------------
-| ১১. ক্যাশ প্রি-ওয়ার্মিং (স্টার্টআপে দ্রুত লোড)
+| ১১. ক্যাশ প্রি-ওয়ার্মিং (স্টার্টআপেই দ্রুত লোড)
 |--------------------------------------------------------------------------
 */
 async function preloadEngine() {
     console.log(`⚡ Pre-warming Cache for ${BOT_NAME}...`);
     try {
-        const [settings, pkgs, trxList, tasksList, forceCh] = await Promise.all([
+        const [settings, trxList, tasksList, forceCh, adminsList] = await Promise.all([
             firebaseRequest('settings'),
-            firebaseRequest('packages'),
             firebaseRequest('used_trxids'),
             firebaseRequest('tasks'),
-            firebaseRequest('force_channels')
+            firebaseRequest('force_channels'),
+            firebaseRequest('admins')
         ]);
 
         if (settings && typeof settings === 'object') {
             for (const [k, v] of Object.entries(settings)) cache.settings.set(k, v);
-        }
-
-        if (pkgs && typeof pkgs === 'object') {
-            for (const [k, v] of Object.entries(pkgs)) cache.packages.set(k, v);
-        } else {
-            const def1 = { id: 'pkg_1', taka: 5, coins: 10 };
-            const def2 = { id: 'pkg_2', taka: 20, coins: 45 };
-            cache.packages.set('pkg_1', def1);
-            cache.packages.set('pkg_2', def2);
-            firebaseRequest('packages/pkg_1', 'PUT', def1).catch(() => {});
-            firebaseRequest('packages/pkg_2', 'PUT', def2).catch(() => {});
         }
 
         if (trxList && typeof trxList === 'object') {
@@ -1686,7 +1850,11 @@ async function preloadEngine() {
             cache.forceChannels = forceCh;
         }
 
-        console.log(`✅ System connected & Ready! Number: ${PAYMENT_NUMBER}`);
+        if (adminsList && typeof adminsList === 'object') {
+            cache.admins = adminsList;
+        }
+
+        console.log(`✅ System connected & Ready! Super Admin: ${SUPER_ADMIN_ID}`);
     } catch (e) {
         console.error('Preload Error:', e.message);
     }
@@ -1721,6 +1889,14 @@ app.listen(PORT, async () => {
         const webhookUrl = `${APP_URL}/api/index`;
         const setWh = await telegramApi('setWebhook', { url: webhookUrl, drop_pending_updates: true });
         console.log('Webhook Setup Result:', setWh);
+
+        // Telegram Bot Menu Commands স্বয়ংক্রিয়ভাবে রেজিস্টার করা
+        await telegramApi('setMyCommands', {
+            commands: [
+                { command: 'start', description: 'Main Menu' },
+                { command: 'build', description: 'Bot Developer Info' }
+            ]
+        });
     } catch (err) {
         console.error('Webhook Setup Error:', err);
     }

@@ -1,11 +1,11 @@
 /*
 |--------------------------------------------------------------------------
-| 𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍 (TURBO SPEED ENGINE ⚡)
-| - Dynamic Package Deposit System (Original Model)
-| - Clean Earn Coins Menu & Start Message
-| - Commands: /start (Main Menu) & /build (Developer Info)
-| - Bot Token: 8362797762:AAH23qRjM7Lte-Mfcmxq9mNCNEZetXpvFZg
+| 𝐀𝐔𝐑𝐀 𝐑𝐄𝐅𝐄𝐑 & 𝐕𝐎𝐓𝐄 (TURBO SPEED ENGINE ⚡)
+| - Bot Name: 𝐀𝐔𝐑𝐀 𝐑𝐄𝐅𝐄𝐑 & 𝐕𝐎𝐓𝐄
+| - Bot Username: @AuraReferVoteBot
+| - Bot Token: 8925755348:AAEIcOlQgZU6xAt4gw-IQ-fFh0254ojhAAk
 | - Super Admin: 8045367594
+| - Payment Number: 01352946834 (Personal - Send Money)
 | - Render: https://aura-channel-sell.onrender.com
 | - Firebase: https://aura-channel-sell-default-rtdb.firebaseio.com/
 |--------------------------------------------------------------------------
@@ -14,11 +14,11 @@
 const express = require('express');
 
 // ==========================================
-// ১. ক্রেডেনশিয়াল ও মূল কনফিগারেশন
+// ১. নতুন ক্রেডেনশিয়াল ও মূল কনফিগারেশন
 // ==========================================
-const BOT_TOKEN = '8362797762:AAH23qRjM7Lte-Mfcmxq9mNCNEZetXpvFZg';
-const BOT_USERNAME = 'AuraChannelSellBot';
-const BOT_NAME = '𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍';
+const BOT_TOKEN = '8925755348:AAEIcOlQgZU6xAt4gw-IQ-fFh0254ojhAAk';
+const BOT_USERNAME = 'AuraReferVoteBot';
+const BOT_NAME = '𝐀𝐔𝐑𝐀 𝐑𝐄𝐅𝐄𝐑 & 𝐕𝐎𝐓𝐄';
 const APP_URL = 'https://aura-channel-sell.onrender.com';
 const SUPER_ADMIN_ID = '8045367594';
 
@@ -621,7 +621,6 @@ function balanceControlKeyboard() {
     };
 }
 
-// মূল প্যাকেজ বাটন জেনারেটর (আগের আসল মডেল)
 function getDepositPackagesKeyboard() {
     const buttons = [];
     const pkgs = Array.from(cache.packages.entries());
@@ -685,7 +684,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // --- প্যাকেজ সিলেক্ট করে নির্দেশিকা প্রদর্শন ---
+        // প্যাকেজ সিলেক্ট করে নির্দেশিকা প্রদর্শন
         if (data.startsWith('dep_pkg_')) {
             answerCallback(callback.id);
             const pkgId = data.replace('dep_pkg_', '');
@@ -719,7 +718,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // --- ডিপোজিট প্রুফ শুরু ---
+        // ডিপোজিট প্রুফ শুরু
         if (data.startsWith('start_dep_proof_')) {
             answerCallback(callback.id);
             const pkgId = data.replace('start_dep_proof_', '');
@@ -1151,7 +1150,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // 🛠️ /build কমান্ড হ্যান্ডলার (Developer Information)
+        // 🛠️ /build কমান্ড হ্যান্ডলার
         // =========================================================================
         if (text === '/build') {
             const devText =
@@ -1167,7 +1166,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // 🚨 ফোর্স চ্যানেল গেট ও তাৎক্ষণিক রেফারেল কাউন্ট (যদি চ্যানেল না থাকে)
+        // 🚨 ফোর্স চ্যানেল গেট ও তাৎক্ষণিক রেফারেল কাউন্ট
         // =========================================================================
         const channelCount = Object.values(cache.forceChannels).filter(ch => ch && ch.channel_id).length;
 
@@ -1697,7 +1696,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // সাধারণ ইউজার মেনু বাটনসমূহ (ইংলিশ বাটন + বাংলা রেসপন্স)
+        // সাধারণ ইউজার মেনু বাটনসমূহ
         // =========================================================================
         if (text === '/start' || text.startsWith('/start')) {
             const startText =
@@ -1724,7 +1723,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // 💳 Deposit (আগের আসল প্যাকেজ মডেল)
+        // 💳 Deposit মেনু
         if (text === '💳 Deposit') {
             if (!cache.packages.size) {
                 sendMessage(chatId, "⚠️ বর্তমানে কোনো ডিপোজিট প্যাকেজ উপলব্ধ নেই। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।");
@@ -1813,7 +1812,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // অ্যাডমিন মেনু বাটনসমূহ (ইংলিশ বাটন)
+        // অ্যাডমিন মেনু বাটনসমূহ
         // =========================================================================
         if (text === '🛠 Admin Panel' && isAdm) {
             sendMessage(chatId, "🛠 <b>এডমিন কন্ট্রোল সেন্টার চালু হয়েছে</b>", getAdminMenu(fromId));

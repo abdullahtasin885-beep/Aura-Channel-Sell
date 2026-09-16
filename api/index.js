@@ -1,9 +1,9 @@
 /*
 |--------------------------------------------------------------------------
 | 𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍 (TURBO SPEED ENGINE ⚡)
+| - Dynamic Package Deposit System (Original Model)
+| - Clean Earn Coins Menu & Start Message
 | - Commands: /start (Main Menu) & /build (Developer Info)
-| - Deposit UI: Exact Match to Screenshot (bKash & Nagad)
-| - Clean & Short Welcome Messages
 | - Bot Token: 8362797762:AAH23qRjM7Lte-Mfcmxq9mNCNEZetXpvFZg
 | - Super Admin: 8045367594
 | - Render: https://aura-channel-sell.onrender.com
@@ -22,7 +22,7 @@ const BOT_NAME = '𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍';
 const APP_URL = 'https://aura-channel-sell.onrender.com';
 const SUPER_ADMIN_ID = '8045367594';
 
-// ডিফল্ট পেমেন্ট ও সাপোর্ট
+// ডিফল্ট পেমেন্ট ও সাপোর্ট তথ্য
 const DEFAULT_PAYMENT_NUMBER = '01352946834'; // বিকাশ ও নগদ পার্সোনাল
 const DEFAULT_DEPOSIT_LOG_ID = '-1003945593094';
 const DEFAULT_TASK_PROOF_LOG_ID = '-1003945593094';
@@ -48,6 +48,7 @@ const FIREBASE_AUTH_PASSWORD = 'mayabiri#';
 const cache = {
     users: new Map(),
     settings: new Map(),
+    packages: new Map(),
     usedTrxIds: new Set(),
     tasks: new Map(),
     userChannels: new Map(),
@@ -468,6 +469,7 @@ function showForceJoin(chatId, firstName = 'User') {
     return sendMessage(chatId, text, { inline_keyboard: inlineKeyboard });
 }
 
+// ভেরিফিকেশন ও রেফার বোনাস প্রদান
 async function verifyAndRewardUser(fromId, callbackUser = null) {
     invalidateUserCache(fromId);
     const joinedAll = await isUserJoinedAllChannels(fromId, true);
@@ -494,7 +496,6 @@ async function verifyAndRewardUser(fromId, callbackUser = null) {
         verified_at: now
     };
 
-    // 🎯 রেফারেল বোনাস প্রদান
     if (user.referred_by && !user.referral_rewarded && String(user.referred_by) !== String(fromId)) {
         const ref = await getUser(user.referred_by);
         if (ref) {
@@ -545,8 +546,9 @@ function getUserMenu(userId) {
 function getAdminMenu(userId) {
     const isSuper = isSuperAdmin(userId);
     const keyboard = [
-        [{ text: '📢 Force Channels', style: 'primary' }, { text: '⚙️ Central Settings', style: 'primary' }],
-        [{ text: '👥 Balance Control', style: 'danger' }]
+        [{ text: '➕ Add Package', style: 'success' }, { text: '➖ Remove Package', style: 'danger' }],
+        [{ text: '📋 Package List', style: 'primary' }, { text: '📢 Force Channels', style: 'primary' }],
+        [{ text: '⚙️ Central Settings', style: 'primary' }, { text: '👥 Balance Control', style: 'danger' }]
     ];
 
     if (isSuper) {
@@ -619,16 +621,23 @@ function balanceControlKeyboard() {
     };
 }
 
-// স্ক্রিনশটের হুবহু ডিপোজিট মেথড বাটন
-function getDepositMethodKeyboard() {
-    return {
-        inline_keyboard: [
-            [
-                { text: '💗 বিকাশ', callback_data: 'dep_method_bkash', style: 'primary' },
-                { text: '💚 নগদ', callback_data: 'dep_method_nagad', style: 'success' }
-            ]
-        ]
-    };
+// মূল প্যাকেজ বাটন জেনারেটর (আগের আসল মডেল)
+function getDepositPackagesKeyboard() {
+    const buttons = [];
+    const pkgs = Array.from(cache.packages.entries());
+
+    for (let i = 0; i < pkgs.length; i += 2) {
+        const row = [];
+        const [id1, p1] = pkgs[i];
+        row.push({ text: `💵 ${p1.taka}৳ = ${p1.coins} Coin`, callback_data: `dep_pkg_${id1}`, style: 'primary' });
+
+        if (i + 1 < pkgs.length) {
+            const [id2, p2] = pkgs[i + 1];
+            row.push({ text: `💵 ${p2.taka}৳ = ${p2.coins} Coin`, callback_data: `dep_pkg_${id2}`, style: 'success' });
+        }
+        buttons.push(row);
+    }
+    return { inline_keyboard: buttons };
 }
 
 /*
@@ -676,47 +685,62 @@ async function handleUpdate(update) {
             return;
         }
 
-        // --- ডিপোজিট মেথড নির্বাচন (বিকাশ অথবা নগদ) ---
-        if (data === 'dep_method_bkash' || data === 'dep_method_nagad') {
+        // --- প্যাকেজ সিলেক্ট করে নির্দেশিকা প্রদর্শন ---
+        if (data.startsWith('dep_pkg_')) {
             answerCallback(callback.id);
-            const isBkash = data === 'dep_method_bkash';
-            const methodName = isBkash ? 'বিকাশ' : 'নগদ';
+            const pkgId = data.replace('dep_pkg_', '');
+            const pkg = cache.packages.get(pkgId);
+
+            if (!pkg) {
+                sendMessage(fromId, "❌ প্যাকেজটি খুঁজে পাওয়া যায়নি!");
+                return;
+            }
+
             const currentPaymentNum = getSetting('payment_number', DEFAULT_PAYMENT_NUMBER);
 
-            const methodText =
-                `💰 <b>${methodName.toUpperCase()} DEPOSIT</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `📱 <b>${methodName} পার্সোনাল নাম্বার:</b>\n` +
-                `👉 <code>${currentPaymentNum}</code> <i>(নাম্বারে চাপ দিলে কপি হবে)</i>\n\n` +
-                `⚠️ <b>জরুরি নিয়মাবলী:</b>\n` +
-                `• শুধুমাত্র <b>Send Money</b> করতে হবে।\n` +
-                `• সর্বনিম্ন ডিপোজিট: <b>10 টাকা</b>।\n` +
-                `• টাকা পাঠানো সম্পন্ন হলে নিচের <b>"📥 Submit Proof"</b> বাটনে চাপুন।`;
+            const depositInstructions =
+                `💳 <b>DEPOSIT INSTRUCTIONS</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `📦 <b>প্যাকেজ:</b> ${formatNumber(pkg.taka)}৳ = ${formatNumber(pkg.coins)} Coins\n` +
+                `💵 <b>পাঠাতে হবে:</b> <b>${formatNumber(pkg.taka)} টাকা</b>\n\n` +
+                `📱 <b>বিকাশ ও নগদ (Personal):</b>\n` +
+                `👉 <code>${currentPaymentNum}</code> <i>(ক্লিক করলে কপি হবে)</i>\n\n` +
+                `⚠️ <b>জরুরি তথ্য:</b>\n` +
+                `• শুধুমাত্র <b>Send Money</b> করবেন।\n` +
+                `• ঠিক <b>${formatNumber(pkg.taka)} টাকা</b> পাঠাবেন।\n` +
+                `• টাকা পাঠানো সম্পন্ন হলে নিচে <b>"📥 Submit Proof"</b> বাটনে চাপুন।`;
 
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📥 Submit Proof', callback_data: `start_dep_proof_${isBkash ? 'bkash' : 'nagad'}`, style: 'success' }]
+                    [{ text: '📥 Submit Proof', callback_data: `start_dep_proof_${pkgId}`, style: 'success' }]
                 ]
             };
 
-            sendMessage(fromId, methodText, keyboard);
+            sendMessage(fromId, depositInstructions, keyboard);
             return;
         }
 
         // --- ডিপোজিট প্রুফ শুরু ---
         if (data.startsWith('start_dep_proof_')) {
             answerCallback(callback.id);
-            const methodKey = data.replace('start_dep_proof_', '');
-            const methodName = methodKey === 'bkash' ? 'বিকাশ' : 'নগদ';
+            const pkgId = data.replace('start_dep_proof_', '');
+            const pkg = cache.packages.get(pkgId);
+
+            if (!pkg) {
+                sendMessage(fromId, "❌ প্যাকেজটি পাওয়া যায়নি!");
+                return;
+            }
 
             cache.userStates.set(fromId, {
-                action: 'dep_step_amount',
-                method: methodName
+                action: 'dep_step_photo',
+                pkgId: pkgId,
+                taka: pkg.taka,
+                coins: pkg.coins
             });
 
             sendMessage(fromId,
-                `💵 <b>ধাপ ১: টাকার পরিমাণ লিখুন</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `পেমেন্ট মেথড: <b>${methodName}</b>\n\n` +
-                `আপনি কত টাকা পাঠিয়েছেন তা সংখ্যায় লিখে পাঠান (সর্বনিম্ন ১০ টাকা):\n\n` +
+                `📸 <b>ধাপ ১: পেমেন্টের স্ক্রিনশট পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `প্যাকেজ: <b>${pkg.taka}৳ = ${pkg.coins} Coin</b>\n\n` +
+                `টাকা পাঠানোর সফল স্ক্রিনশটটি <b>Photo</b> হিসেবে ইনবক্সে পাঠান:\n\n` +
                 `<i>(বাতিল করতে নিচের /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
             );
@@ -831,9 +855,7 @@ async function handleUpdate(update) {
                 const approvedCaption =
                     `✅ <b>ডিপোজিট অনুমোদিত (APPROVED)</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                     `👤 <b>ইউজার:</b> ${escapeHtml(dep.user_name)} (<code>${dep.user_id}</code>)\n` +
-                    `🏦 <b>মেথড:</b> ${escapeHtml(dep.method)}\n` +
-                    `💵 <b>টাকা:</b> ${dep.taka} BDT\n` +
-                    `🪙 <b>কয়েন যোগ:</b> +${dep.coins} Coins\n` +
+                    `📦 <b>প্যাকেজ:</b> ${dep.taka}৳ = ${dep.coins} Coins\n` +
                     `📱 <b>প্রেরক নাম্বার:</b> <code>${escapeHtml(dep.sender_number)}</code>\n` +
                     `🧾 <b>Trx ID:</b> <code>${escapeHtml(dep.trx_id)}</code>\n` +
                     `👮 <b>অনুমোদনকারী:</b> ${escapeHtml(adminName)}\n` +
@@ -854,8 +876,7 @@ async function handleUpdate(update) {
                 const rejectedCaption =
                     `❌ <b>ডিপোজিট বাতিল (REJECTED)</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                     `👤 <b>ইউজার:</b> ${escapeHtml(dep.user_name)} (<code>${dep.user_id}</code>)\n` +
-                    `🏦 <b>মেথড:</b> ${escapeHtml(dep.method)}\n` +
-                    `💵 <b>টাকা:</b> ${dep.taka} BDT\n` +
+                    `📦 <b>প্যাকেজ:</b> ${dep.taka}৳ = ${dep.coins} Coins\n` +
                     `📱 <b>প্রেরক নাম্বার:</b> <code>${escapeHtml(dep.sender_number)}</code>\n` +
                     `🧾 <b>Trx ID:</b> <code>${escapeHtml(dep.trx_id)}</code>\n` +
                     `👮 <b>বাতিলকারী:</b> ${escapeHtml(adminName)}`;
@@ -967,7 +988,6 @@ async function handleUpdate(update) {
                 return;
             }
 
-            // ব্যালেন্স কন্ট্রোল
             if (data === 'bal_add') {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'balance_add_uid' });
@@ -982,7 +1002,16 @@ async function handleUpdate(update) {
                 return;
             }
 
-            // ফোর্স চ্যানেল
+            const remPkgMatch = data.match(/^rem_pkg_([A-Za-z0-9_-]+)$/);
+            if (remPkgMatch) {
+                answerCallback(callback.id);
+                const pkgId = remPkgMatch[1];
+                cache.packages.delete(pkgId);
+                firebaseRequest(`packages/${pkgId}`, 'DELETE').catch(() => {});
+                sendMessage(fromId, "✅ <b>প্যাকেজটি সফলভাবে মুছে ফেলা হয়েছে!</b>", getAdminMenu(fromId));
+                return;
+            }
+
             if (data === 'force_add') {
                 answerCallback(callback.id);
                 cache.adminStates.set(fromId, { action: 'add_force_channel_input' });
@@ -1050,7 +1079,6 @@ async function handleUpdate(update) {
                 return;
             }
 
-            // সুপার এডমিন ম্যানেজমেন্ট
             if (isSuperAdmin(fromId)) {
                 if (data === 'adm_add') {
                     answerCallback(callback.id);
@@ -1139,7 +1167,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // 🚨 ফোর্স চ্যানেল গেট ও ইনস্ট্যান্ট রেফারেল
+        // 🚨 ফোর্স চ্যানেল গেট ও তাৎক্ষণিক রেফারেল কাউন্ট (যদি চ্যানেল না থাকে)
         // =========================================================================
         const channelCount = Object.values(cache.forceChannels).filter(ch => ch && ch.channel_id).length;
 
@@ -1154,7 +1182,6 @@ async function handleUpdate(update) {
                     return;
                 }
             } else {
-                // কোনো চ্যানেল না থাকলে ক্লিক করলেই ইনস্ট্যান্ট রেফার কাউন্ট
                 if (!user.is_verified || !user.referral_rewarded) {
                     await verifyAndRewardUser(fromId, msg.from);
                 }
@@ -1162,39 +1189,11 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // ডিপোজিট প্রুফ সাবমিশন (ধাপে ধাপে ভ্যালিডেশন)
+        // ডিপোজিট প্রুফ সাবমিশন (প্যাকেজ মডেল)
         // =========================================================================
         const uState = cache.userStates.get(fromId);
 
-        // ধাপ ১: টাকার পরিমাণ ইনপুট
-        if (uState?.action === 'dep_step_amount') {
-            if (!isPositiveInt(text) || parseInt(text) < 10) {
-                sendMessage(chatId, "❌ <b>সর্বনিম্ন ডিপোজিট ১০ টাকা!</b> সঠিক সংখ্যা লিখুন (যেমন: 50):\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
-                return;
-            }
-
-            const amount = parseInt(text);
-            const coins = amount * 2; // প্রতি ১ টাকায় ২ কয়েন (১০ টাকায় ২০ কয়েন)
-
-            cache.userStates.set(fromId, {
-                ...uState,
-                action: 'dep_step_photo',
-                taka: amount,
-                coins: coins
-            });
-
-            sendMessage(chatId,
-                `📸 <b>ধাপ ২: পেমেন্টের স্ক্রিনশট পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `মেথড: <b>${uState.method}</b>\n` +
-                `টাকা: <b>${amount} BDT (${coins} Coins)</b>\n\n` +
-                `টাকা পাঠানোর সফল স্ক্রিনশটটি <b>Photo</b> হিসেবে ইনবক্সে পাঠান:\n\n` +
-                `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
-                getCancelKeyboard()
-            );
-            return;
-        }
-
-        // ধাপ ২: স্ক্রিনশট ফটো চেক
+        // ধাপ ১: স্ক্রিনশট ফটো
         if (uState?.action === 'dep_step_photo') {
             if (!msg.photo || !msg.photo.length) {
                 sendMessage(chatId, "❌ <b>ভুল ইনপুট!</b> দয়া করে পেমেন্টের সঠিক <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
@@ -1209,8 +1208,8 @@ async function handleUpdate(update) {
             });
 
             sendMessage(chatId,
-                `🧾 <b>ধাপ ৩: Trx ID পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `পেমেন্টের <b>Trx ID (Transaction ID)</b> লিখে পাঠান:\n` +
+                `🧾 <b>ধাপ ২: Trx ID পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `বিকাশ/নগদ পেমেন্টের <b>Trx ID (Transaction ID)</b> লিখে পাঠান:\n` +
                 `<i>(যেমন: BLK9827364)</i>\n\n` +
                 `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
@@ -1218,7 +1217,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // ধাপ ৩: Trx ID চেক
+        // ধাপ ২: Trx ID চেক ও ডুপ্লিকেট লক
         if (uState?.action === 'dep_step_trx') {
             if (!text || !isValidTrxId(text)) {
                 sendMessage(chatId, "❌ <b>ভুল Trx ID!</b> দয়া করে সঠিক Transaction ID লিখে পাঠান:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
@@ -1246,8 +1245,8 @@ async function handleUpdate(update) {
             });
 
             sendMessage(chatId,
-                `📱 <b>ধাপ ৪: প্রেরক নাম্বার পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `যে নাম্বার থেকে টাকা পাঠিয়েছেন, সেই <b>১১ ডিজিটের মোবাইল নাম্বারটি</b> পাঠান:\n` +
+                `📱 <b>ধাপ ৩: প্রেরক নাম্বার পাঠান</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `যে বিকাশ বা নগদ নাম্বার থেকে টাকা পাঠিয়েছেন, সেই <b>১১ ডিজিটের মোবাইল নাম্বারটি</b> পাঠান:\n` +
                 `<i>(যেমন: 017xxxxxxxx)</i>\n\n` +
                 `<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`,
                 getCancelKeyboard()
@@ -1255,7 +1254,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // ধাপ ৪: প্রেরক নাম্বার ভ্যালিডেশন
+        // ধাপ ৩: প্রেরক নাম্বার ভ্যালিডেশন
         if (uState?.action === 'dep_step_phone') {
             if (!text || !isValidBDPhone(text)) {
                 sendMessage(chatId, "❌ <b>ভুল মোবাইল নাম্বার!</b> দয়া করে সঠিক ১১ ডিজিটের মোবাইল নাম্বার লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
@@ -1271,7 +1270,7 @@ async function handleUpdate(update) {
                 user_id: fromId,
                 user_name: msg.from.first_name || 'User',
                 user_username: msg.from.username ? `@${msg.from.username}` : '',
-                method: uState.method,
+                pkg_id: uState.pkgId,
                 taka: uState.taka,
                 coins: uState.coins,
                 file_id: uState.file_id,
@@ -1288,10 +1287,10 @@ async function handleUpdate(update) {
             cache.userStates.delete(fromId);
 
             const channelCaption =
-                `🔔 <b>নতুন ডিপোজিট রিকোয়েস্ট!</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `🔔 <b>নতুন ডিপোজিট সাবমিশন!</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `👤 <b>ইউজার:</b> ${escapeHtml(depData.user_name)} (<code>${depData.user_id}</code>)\n` +
                 `🔗 <b>ইউজারনেম:</b> ${escapeHtml(depData.user_username || 'N/A')}\n\n` +
-                `🏦 <b>মেথড:</b> ${escapeHtml(depData.method)}\n` +
+                `📦 <b>প্যাকেজ:</b> ${depData.taka}৳ = ${depData.coins} Coins\n` +
                 `💵 <b>টাকার পরিমাণ:</b> <b>${depData.taka} BDT</b>\n` +
                 `🪙 <b>পাবে:</b> <b>${depData.coins} Coins</b>\n\n` +
                 `📱 <b>টাকা পাঠানো নাম্বার:</b> <code>${escapeHtml(senderNumber)}</code>\n` +
@@ -1311,8 +1310,7 @@ async function handleUpdate(update) {
 
             sendMessage(chatId,
                 `✅ <b>আপনার পেমেন্ট প্রুফ জমা হয়েছে!</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
-                `🏦 মেথড: <b>${depData.method}</b>\n` +
-                `💵 পরিমাণ: <b>${depData.taka} BDT (${depData.coins} Coins)</b>\n` +
+                `📦 প্যাকেজ: <b>${depData.taka}৳ = ${depData.coins} Coins</b>\n` +
                 `🧾 Trx ID: <code>${depData.trx_id}</code>\n` +
                 `📱 প্রেরক নাম্বার: <code>${senderNumber}</code>\n\n` +
                 `⏳ আপনার রিকোয়েস্টটি বর্তমানে <b>পেন্ডিং (Pending)</b> রয়েছে। এডমিন ভেরিফাই করে এপ্রুভ করলেই ব্যালেন্সে কয়েন যুক্ত হয়ে যাবে।`,
@@ -1491,6 +1489,33 @@ async function handleUpdate(update) {
         // =========================================================================
         if (isAdm) {
             const aState = cache.adminStates.get(fromId);
+
+            if (aState?.action === 'pkg_add_taka' && text) {
+                if (!isPositiveInt(text)) {
+                    sendMessage(chatId, "❌ সঠিক টাকার পরিমাণ (সংখ্যা) লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                cache.adminStates.set(fromId, { action: 'pkg_add_coins', taka: parseInt(text) });
+                sendMessage(chatId, `💰 <b>${text} টাকায় কত কয়েন দিতে চান? কয়েনের সংখ্যা লিখুন:</b>\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>`, getCancelKeyboard());
+                return;
+            }
+
+            if (aState?.action === 'pkg_add_coins' && text) {
+                if (!isPositiveInt(text)) {
+                    sendMessage(chatId, "❌ সঠিক কয়েনের পরিমাণ (সংখ্যা) লিখুন:\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+                    return;
+                }
+                const coins = parseInt(text);
+                const pkgId = `pkg_${Date.now()}`;
+                const newPkg = { id: pkgId, taka: aState.taka, coins: coins };
+
+                cache.packages.set(pkgId, newPkg);
+                firebaseRequest(`packages/${pkgId}`, 'PUT', newPkg).catch(() => {});
+                cache.adminStates.delete(fromId);
+
+                sendMessage(chatId, `✅ <b>নতুন প্যাকেজ সফলভাবে যুক্ত হয়েছে!</b>\n💵 <b>${newPkg.taka}৳ = ${newPkg.coins} Coins</b>`, getAdminMenu(fromId));
+                return;
+            }
 
             if (aState?.action === 'cfg_dep_chan' && text) {
                 setSetting('deposit_channel_id', text.trim());
@@ -1672,7 +1697,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // সাধারণ ইউজার মেনু বাটনসমূহ
+        // সাধারণ ইউজার মেনু বাটনসমূহ (ইংলিশ বাটন + বাংলা রেসপন্স)
         // =========================================================================
         if (text === '/start' || text.startsWith('/start')) {
             const startText =
@@ -1682,6 +1707,7 @@ async function handleUpdate(update) {
             return;
         }
 
+        // 💰 Earn Coins মেনু
         if (text === '💰 Earn Coins') {
             const kb = {
                 inline_keyboard: [
@@ -1691,19 +1717,23 @@ async function handleUpdate(update) {
                     ]
                 ]
             };
-            sendMessage(chatId, "💰 <b>আর্ন কয়েন সেকশন</b>\nআপনি কোন ধরনের কাজ সম্পন্ন করে কয়েন আয় করতে চান? নিচে থেকে নির্বাচন করুন:", kb);
+            const earnText =
+                `💰 <b>Earn Coins</b>\n\n` +
+                `👇 কাজ বেছে নিয়ে কয়েন আয় করুন!`;
+            sendMessage(chatId, earnText, kb);
             return;
         }
 
-        // স্ক্রিনশটের হুবহু ডিপোজিট ফরম্যাট
+        // 💳 Deposit (আগের আসল প্যাকেজ মডেল)
         if (text === '💳 Deposit') {
-            const depText =
-                `💰 <b>DEPOSIT</b>\n\n` +
-                `⭐️ Point কিনতে নিচের Payment Method নির্বাচন করুন।\n\n` +
-                `💗 বিকাশ অথবা 💚 নগদ নির্বাচন করুন।\n\n` +
-                `⚠️ <b>Minimum Deposit:</b> 10 টাকা`;
-
-            sendMessage(chatId, depText, getDepositMethodKeyboard());
+            if (!cache.packages.size) {
+                sendMessage(chatId, "⚠️ বর্তমানে কোনো ডিপোজিট প্যাকেজ উপলব্ধ নেই। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।");
+                return;
+            }
+            sendMessage(chatId,
+                `💳 <b>কয়েন ডিপোজিট প্যাকেজ</b>\n━━━━━━━━━━━━━━━━━━━━\nকয়েন কিনতে নিচের প্যাকেজগুলো থেকে নির্বাচন করুন:`,
+                getDepositPackagesKeyboard()
+            );
             return;
         }
 
@@ -1783,10 +1813,41 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // অ্যাডমিন মেনু বাটনসমূহ
+        // অ্যাডমিন মেনু বাটনসমূহ (ইংলিশ বাটন)
         // =========================================================================
         if (text === '🛠 Admin Panel' && isAdm) {
             sendMessage(chatId, "🛠 <b>এডমিন কন্ট্রোল সেন্টার চালু হয়েছে</b>", getAdminMenu(fromId));
+            return;
+        }
+
+        if (text === '➕ Add Package' && isAdm) {
+            cache.adminStates.set(fromId, { action: 'pkg_add_taka' });
+            sendMessage(chatId, "➕ <b>নতুন ডিপোজিট প্যাকেজ তৈরি</b>\n\nপ্রথমে টাকার পরিমাণ (BDT) লিখুন:\n<i>(যেমন: 20)</i>\n\n<i>(বাতিল করতে /cancel বাটনে চাপুন)</i>", getCancelKeyboard());
+            return;
+        }
+
+        if (text === '➖ Remove Package' && isAdm) {
+            if (!cache.packages.size) {
+                sendMessage(chatId, "⚠️ মুছে ফেলার মতো কোনো প্যাকেজ নেই!");
+                return;
+            }
+            const kb = [];
+            for (const [id, p] of cache.packages) {
+                kb.push([{ text: `❌ ${p.taka}৳ = ${p.coins} Coins`, callback_data: `rem_pkg_${id}`, style: 'danger' }]);
+            }
+            sendMessage(chatId, "🗑 <b>যে প্যাকেজটি মুছে ফেলতে চান তা নির্বাচন করুন:</b>", { inline_keyboard: kb });
+            return;
+        }
+
+        if (text === '📋 Package List' && isAdm) {
+            let list = "📋 <b>বর্তমান ডিপোজিট প্যাকেজসমূহ:</b>\n━━━━━━━━━━━━━━━━━━━━\n";
+            if (!cache.packages.size) list += "কোনো প্যাকেজ নেই।";
+            else {
+                for (const [, p] of cache.packages) {
+                    list += `• <b>${p.taka} BDT = ${p.coins} Coins</b>\n`;
+                }
+            }
+            sendMessage(chatId, list, getAdminMenu(fromId));
             return;
         }
 
@@ -1826,8 +1887,9 @@ async function handleUpdate(update) {
 async function preloadEngine() {
     console.log(`⚡ Pre-warming Cache for ${BOT_NAME}...`);
     try {
-        const [settings, trxList, tasksList, forceCh, adminsList] = await Promise.all([
+        const [settings, pkgs, trxList, tasksList, forceCh, adminsList] = await Promise.all([
             firebaseRequest('settings'),
+            firebaseRequest('packages'),
             firebaseRequest('used_trxids'),
             firebaseRequest('tasks'),
             firebaseRequest('force_channels'),
@@ -1836,6 +1898,17 @@ async function preloadEngine() {
 
         if (settings && typeof settings === 'object') {
             for (const [k, v] of Object.entries(settings)) cache.settings.set(k, v);
+        }
+
+        if (pkgs && typeof pkgs === 'object') {
+            for (const [k, v] of Object.entries(pkgs)) cache.packages.set(k, v);
+        } else {
+            const def1 = { id: 'pkg_1', taka: 5, coins: 10 };
+            const def2 = { id: 'pkg_2', taka: 20, coins: 45 };
+            cache.packages.set('pkg_1', def1);
+            cache.packages.set('pkg_2', def2);
+            firebaseRequest('packages/pkg_1', 'PUT', def1).catch(() => {});
+            firebaseRequest('packages/pkg_2', 'PUT', def2).catch(() => {});
         }
 
         if (trxList && typeof trxList === 'object') {
@@ -1890,7 +1963,7 @@ app.listen(PORT, async () => {
         const setWh = await telegramApi('setWebhook', { url: webhookUrl, drop_pending_updates: true });
         console.log('Webhook Setup Result:', setWh);
 
-        // Telegram Bot Menu Commands স্বয়ংক্রিয়ভাবে রেজিস্টার করা
+        // Telegram Menu Commands স্বয়ংক্রিয়ভাবে সেট করা
         await telegramApi('setMyCommands', {
             commands: [
                 { command: 'start', description: 'Main Menu' },

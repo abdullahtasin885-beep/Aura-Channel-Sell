@@ -1,7 +1,7 @@
 {
-  "name": "aura-channel-sell",
+  "name": "aura-task-earn",
   "version": "1.0.0",
-  "description": "Aura Channel Sell Telegram Bot",
+  "description": "AURA TASK & EARN Telegram Bot",
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js"

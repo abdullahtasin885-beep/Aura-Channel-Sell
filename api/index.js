@@ -1,7 +1,7 @@
 /*
 |--------------------------------------------------------------------------
 | 𝐀𝐔𝐑𝐀 𝐓𝐀𝐒𝐊 & 𝐄𝐀𝐑𝐍 (TURBO SPEED ENGINE ⚡)
-| - Strict Validation & Dynamic Bidding Task Marketplace
+| - Model: Task Marketplace + Force Join Gate + Multi-Step Deposit
 | - Bot Token: 8362797762:AAH23qRjM7Lte-Mfcmxq9mNCNEZetXpvFZg
 | - Super Admin: 8045367594
 | - Payment Number: 01352946834 (Personal - Send Money)
@@ -24,10 +24,12 @@ const SUPER_ADMIN_ID = '8045367594';
 // পেমেন্ট তথ্য
 const PAYMENT_NUMBER = '01352946834'; // বিকাশ ও নগদ পার্সোনাল
 
-// ডিফল্ট চ্যানেল ও লিংক
+// ডিফল্ট লগ চ্যানেল ও লিংক
 const DEFAULT_DEPOSIT_LOG_ID = '-1003945593094';
 const DEFAULT_TASK_PROOF_LOG_ID = '-1003945593094';
 const DEFAULT_SUPPORT_URL = 'https://t.me/Sakib_Developer1';
+const DEVELOPER_NAME = 'SΛKIB 〆 DΞVΞLOPΞR';
+const DEVELOPER_LINK = 'https://t.me/Sakib_Developer1';
 
 /*
 |--------------------------------------------------------------------------
@@ -50,14 +52,23 @@ const cache = {
     packages: new Map(),
     usedTrxIds: new Set(),
     tasks: new Map(),
+    userChannels: new Map(),
+    forceChannels: {},
     admins: {},
     adminStates: new Map(),
     userStates: new Map()
 };
 
+const channelAlertCooldown = new Map();
+
+function invalidateUserCache(userId) {
+    cache.users.delete(String(userId));
+    cache.userChannels.delete(String(userId));
+}
+
 /*
 |--------------------------------------------------------------------------
-| ৪. কঠোর ইনপুট ভ্যালিডেশন ও হেল্পার ফাংশন
+| ৪. ফরম্যাটিং ও কঠোর ভ্যালিডেশন
 |--------------------------------------------------------------------------
 */
 function escapeHtml(text) {
@@ -81,13 +92,11 @@ function normalizeText(text) {
     return text.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
 }
 
-// ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার ভ্যালিডেশন
 function isValidBDPhone(phone) {
     const clean = phone.replace(/[^0-9]/g, '');
     return /^01[3-9]\d{8}$/.test(clean);
 }
 
-// সঠিক লিংক ভ্যালিডেশন
 function isValidURL(link) {
     if (!link) return false;
     const str = link.trim();
@@ -100,7 +109,6 @@ function isValidURL(link) {
     }
 }
 
-// Trx ID ভ্যালিডেশন
 function isValidTrxId(trx) {
     if (!trx) return false;
     const clean = trx.trim();
@@ -125,6 +133,17 @@ function formatTimestamp(timestampInSeconds) {
         minute: '2-digit',
         hour12: true
     });
+}
+
+function normalizeChannelInput(input) {
+    input = normalizeText(input).trim();
+    if (!input) return '';
+    if (input.startsWith('-100')) return input;
+    const linkMatch = input.match(/(?:https?:\/\/)?(?:www\.)?t\.me\/([A-Za-z0-9_]{4,32})/i);
+    if (linkMatch) return '@' + linkMatch[1];
+    if (input.startsWith('@')) return input;
+    if (/^[A-Za-z0-9_]{4,32}$/.test(input)) return '@' + input;
+    return input;
 }
 
 /*
@@ -237,6 +256,10 @@ async function editMessageCaption(chatId, messageId, caption, replyMarkup = null
     return await telegramApi('editMessageCaption', params);
 }
 
+async function deleteMessage(chatId, messageId) {
+    return await telegramApi('deleteMessage', { chat_id: chatId, message_id: messageId });
+}
+
 async function answerCallback(callbackId, text = '', showAlert = false) {
     return await telegramApi('answerCallbackQuery', {
         callback_query_id: callbackId,
@@ -245,9 +268,20 @@ async function answerCallback(callbackId, text = '', showAlert = false) {
     });
 }
 
+async function sendLongMessage(chatId, text, extra = null) {
+    const max = 3800;
+    if (text.length <= max) return await sendMessage(chatId, text, extra);
+    let offset = 0;
+    while (offset < text.length) {
+        let chunk = text.slice(offset, offset + max);
+        offset += chunk.length;
+        await sendMessage(chatId, chunk, offset >= text.length ? extra : null);
+    }
+}
+
 /*
 |--------------------------------------------------------------------------
-| ৭. ডাটাবেজ অপারেশন
+| ৭. ডাটাবেজ অপারেশনস
 |--------------------------------------------------------------------------
 */
 async function getUser(userId) {
@@ -259,6 +293,13 @@ async function getUser(userId) {
         return res;
     }
     return null;
+}
+
+function setUser(userId, data) {
+    const uid = String(userId);
+    cache.users.set(uid, data);
+    firebaseRequest(`users/${uid}`, 'PUT', data).catch(console.error);
+    return true;
 }
 
 function updateUser(userId, data) {
@@ -293,18 +334,213 @@ function isAdmin(userId) {
 
 /*
 |--------------------------------------------------------------------------
-| ৮. কীবোর্ড ও মেনুসমূহ
+| ৮. ফোর্স চ্যানেল ও রিয়েল-টাইম লিভার চেকার
+|--------------------------------------------------------------------------
+*/
+async function alertSuperAdminBotRemoved(channel, index) {
+    const now = Date.now();
+    const lastAlert = channelAlertCooldown.get(channel.channel_id) || 0;
+    if (now - lastAlert < 3 * 60 * 1000) return;
+    channelAlertCooldown.set(channel.channel_id, now);
+
+    let channelUsername = channel.channel_username || '';
+    if (!channelUsername && channel.channel_link) {
+        channelUsername = normalizeChannelInput(channel.channel_link);
+    }
+    if (!channelUsername) channelUsername = `ID: ${channel.channel_id}`;
+
+    const alertText =
+        `🚨 <b>সুপার এডমিন সতর্কতা: চ্যানেল থেকে বট রিমুভ হয়েছে!</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `⚠️ <b>সমস্যা:</b> একজন ইউজার ভেরিফাই করতে গিয়ে আটকে গেছে, কারণ বটটিকে চ্যানেল থেকে অ্যাডমিন থেকে রিমুভ করা হয়েছে!\n\n` +
+        `🔢 <b>চ্যানেল ক্রম:</b> <b>চ্যানেল #${index}</b>\n` +
+        `📢 <b>নাম:</b> <b>${escapeHtml(channel.channel_name || 'N/A')}</b>\n` +
+        `🔗 <b>ইউজারনেম:</b> <code>${escapeHtml(channelUsername)}</code>\n` +
+        `🆔 <b>আইডি:</b> <code>${escapeHtml(channel.channel_id)}</code>\n\n` +
+        `<i>💡 সমাধান: দ্রুত চ্যানেলটিতে বটকে পুনরায় Admin পারমিশন দিন।</i>`;
+
+    sendMessage(SUPER_ADMIN_ID, alertText).catch(() => {});
+}
+
+async function verifyChannelAndBotAdmin(targetInput) {
+    const normalized = normalizeChannelInput(targetInput);
+    if (!normalized) return { ok: false, error: "❌ সঠিক Channel ID বা Username প্রদান করুন।" };
+
+    const chatRes = await telegramApi('getChat', { chat_id: normalized });
+    if (!chatRes?.ok || !chatRes.result) {
+        return { ok: false, error: `❌ <b>চ্যানেলটি খুঁজে পাওয়া যায়নি!</b> নিশ্চিত করুন যে ইউজারনেম সঠিক ও পাবলিক।` };
+    }
+
+    const chat = chatRes.result;
+    const botId = BOT_TOKEN.split(':')[0];
+    const memberRes = await telegramApi('getChatMember', { chat_id: chat.id, user_id: botId });
+
+    if (!memberRes?.ok || !memberRes.result) {
+        return { ok: false, error: `❌ <b>বট এই চ্যানেলে যুক্ত নেই!</b> আগে বটকে <b>${escapeHtml(chat.title || 'Channel')}</b>-এ অ্যাডমিন বানান।` };
+    }
+
+    const isBotAdmin = ['administrator', 'creator'].includes(memberRes.result.status);
+    if (!isBotAdmin) {
+        return { ok: false, error: `⚠️ <b>বট চ্যানেলে অ্যাডমিন নয়!</b> অনুগ্রহ করে অ্যাডমিন পারমিশন দিন।` };
+    }
+
+    let channelLink = chat.username ? `https://t.me/${chat.username}` : (chat.invite_link || '');
+
+    return {
+        ok: true,
+        channel_id: String(chat.id),
+        channel_title: chat.title || 'Channel',
+        channel_username: chat.username ? `@${chat.username}` : '',
+        channel_link: channelLink
+    };
+}
+
+async function isJoinedChannel(channelId, userId) {
+    if (!channelId) return false;
+    const res = await telegramApi('getChatMember', { chat_id: channelId, user_id: userId });
+    if (!res?.ok) return false;
+    const status = res.result?.status;
+    if (['creator', 'administrator', 'member'].includes(status)) return true;
+    if (status === 'restricted') return Boolean(res.result?.is_member);
+    return false;
+}
+
+async function isBotAdminInChat(chatId) {
+    const botId = BOT_TOKEN.split(':')[0];
+    const res = await telegramApi('getChatMember', { chat_id: chatId, user_id: botId });
+    return res && res.ok && ['administrator', 'creator'].includes(res.result?.status);
+}
+
+async function isUserJoinedAllChannels(userId, bypassCache = false) {
+    const uidStr = String(userId);
+    const now = Date.now();
+
+    if (!bypassCache) {
+        const cached = cache.userChannels.get(uidStr);
+        if (cached && now < cached.expiresAt) return cached.isMember;
+    }
+
+    const channelEntries = Object.entries(cache.forceChannels).filter(([_, ch]) => ch && ch.channel_id);
+    if (!channelEntries.length) {
+        cache.userChannels.set(uidStr, { isMember: true, expiresAt: now + 30000 });
+        return true;
+    }
+
+    const checks = await Promise.all(channelEntries.map(async ([key, ch], idx) => {
+        const botIsAdmin = await isBotAdminInChat(ch.channel_id);
+        if (!botIsAdmin) {
+            alertSuperAdminBotRemoved(ch, idx + 1);
+            return false;
+        }
+        return await isJoinedChannel(ch.channel_id, uidStr);
+    }));
+
+    const allJoined = checks.every(Boolean);
+    cache.userChannels.set(uidStr, { isMember: allJoined, expiresAt: now + (allJoined ? 15000 : 5000) });
+    return allJoined;
+}
+
+function showForceJoin(chatId, firstName = 'User') {
+    const channelList = Object.values(cache.forceChannels).filter(ch => ch && ch.channel_link);
+    const inlineKeyboard = [];
+    const total = channelList.length;
+
+    for (let i = 0; i < total; i += 2) {
+        if (i + 1 < total) {
+            inlineKeyboard.push([
+                { text: channelList[i].channel_name || 'Join', url: channelList[i].channel_link, style: 'primary' },
+                { text: channelList[i + 1].channel_name || 'Join', url: channelList[i + 1].channel_link, style: 'danger' }
+            ]);
+        } else {
+            inlineKeyboard.push([
+                { text: channelList[i].channel_name || 'Join', url: channelList[i].channel_link, style: 'primary' }
+            ]);
+        }
+    }
+
+    inlineKeyboard.push([
+        { text: 'Claim', callback_data: 'verify_join', style: 'success' }
+    ]);
+
+    const text =
+        `👋 <b>Hello, ${escapeHtml(firstName)}!</b>\n\n` +
+        `📢 <b>Join All Channels To Continue.</b>\n` +
+        `<i>(You must be a member of all channels to access ${escapeHtml(BOT_NAME)})</i>`;
+
+    return sendMessage(chatId, text, { inline_keyboard: inlineKeyboard });
+}
+
+async function verifyAndRewardUser(fromId, callbackUser = null) {
+    invalidateUserCache(fromId);
+    const joinedAll = await isUserJoinedAllChannels(fromId, true);
+    if (!joinedAll) return { success: false };
+
+    let user = await getUser(fromId);
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!user) {
+        user = {
+            user_id: fromId,
+            first_name: callbackUser?.first_name || 'User',
+            username: callbackUser?.username || '',
+            balance: 0,
+            is_verified: true,
+            referral_rewarded: false,
+            created_at: now
+        };
+        setUser(fromId, user);
+    }
+
+    const userUpdates = {
+        is_verified: true,
+        verified_at: now
+    };
+
+    // 🎯 কঠোর রেফারেল রিওয়ার্ড প্রদান (চ্যানেল ভেরিফাই হলেই কেবল পাবে)
+    if (user.referred_by && !user.referral_rewarded && String(user.referred_by) !== String(fromId)) {
+        const ref = await getUser(user.referred_by);
+        if (ref) {
+            const refBonus = Number(getSetting('referral_bonus', 2));
+            const newTotalRefs = Number(ref.total_referrals || 0) + 1;
+            const newRefBalance = Number(ref.balance || 0) + refBonus;
+
+            updateUser(user.referred_by, {
+                balance: newRefBalance,
+                total_referrals: newTotalRefs
+            });
+
+            userUpdates.referral_rewarded = true;
+
+            sendMessage(
+                user.referred_by,
+                `🎉 <b>New Referral Verified!</b>\n━━━━━━━━━━━━━━━━━━\n\n` +
+                `👤 User: <b>${escapeHtml(user.first_name || 'User')}</b>\n` +
+                `⭐ Bonus: <b>+${formatNumber(refBonus)} Coins</b>\n` +
+                `👥 Total Referrals: <b>${newTotalRefs}</b>`
+            ).catch(() => {});
+        }
+    }
+
+    updateUser(fromId, userUpdates);
+    return { success: true };
+}
+
+/*
+|--------------------------------------------------------------------------
+| ৯. কীবোর্ড ও মেনুসমূহ (ইংলিশ + কালার স্টাইল)
 |--------------------------------------------------------------------------
 */
 function getUserMenu(userId) {
     const keyboard = [
-        [{ text: '📢 Bot Refer Buy' }, { text: '📦 Poll Vote Buy' }],
-        [{ text: '💰 আর্ন কয়েন' }, { text: '📜 আমার কাজ' }],
-        [{ text: '💳 Deposit' }, { text: '👤 প্রোফাইল' }],
-        [{ text: '📮 Referral' }, { text: '💬 Support' }]
+        // সবার প্রথমে Earn Coins
+        [{ text: '💰 Earn Coins', style: 'success' }],
+        [{ text: '📢 Bot Refer Buy', style: 'primary' }, { text: '📦 Poll Vote Buy', style: 'primary' }],
+        [{ text: '📜 My Tasks', style: 'primary' }, { text: '💳 Deposit', style: 'success' }],
+        [{ text: '👤 Profile', style: 'primary' }, { text: '📮 Referral', style: 'success' }],
+        [{ text: '💬 Support', style: 'danger' }]
     ];
     if (isAdmin(userId)) {
-        keyboard.push([{ text: '🛠 Admin Panel' }]);
+        keyboard.push([{ text: '🛠 Admin Panel', style: 'danger' }]);
     }
     return { keyboard, resize_keyboard: true };
 }
@@ -312,16 +548,31 @@ function getUserMenu(userId) {
 function getAdminMenu() {
     return {
         keyboard: [
-            [{ text: '➕ প্যাকেজ যোগ করুন' }, { text: '📋 প্যাকেজ তালিকা' }],
-            [{ text: '⚙️ সেন্ট্রাল সেটিংস' }, { text: '👥 ব্যালেন্স কন্ট্রোল' }],
-            [{ text: '🔙 Back to User Panel' }]
+            [{ text: '➕ Add Package', style: 'success' }, { text: '➖ Remove Package', style: 'danger' }],
+            [{ text: '📋 Package List', style: 'primary' }, { text: '📢 Force Channels', style: 'primary' }],
+            [{ text: '⚙️ Central Settings', style: 'primary' }, { text: '👥 Balance Control', style: 'danger' }],
+            [{ text: '🔙 Back to User Panel', style: 'danger' }]
         ],
         resize_keyboard: true
     };
 }
 
+function forceJoinKeyboard() {
+    return {
+        inline_keyboard: [
+            [
+                { text: '➕ চ্যানেল যোগ করুন', callback_data: 'force_add', style: 'success' },
+                { text: '➖ চ্যানেল রিমুভ করুন', callback_data: 'force_remove', style: 'danger' }
+            ],
+            [
+                { text: '📋 চ্যানেল তালিকা', callback_data: 'force_list', style: 'primary' }
+            ]
+        ]
+    };
+}
+
 function getCancelKeyboard() {
-    return { keyboard: [[{ text: '/cancel' }]], resize_keyboard: true, one_time_keyboard: true };
+    return { keyboard: [[{ text: '/cancel', style: 'danger' }]], resize_keyboard: true, one_time_keyboard: true };
 }
 
 function getDepositPackagesKeyboard() {
@@ -331,11 +582,11 @@ function getDepositPackagesKeyboard() {
     for (let i = 0; i < pkgs.length; i += 2) {
         const row = [];
         const [id1, p1] = pkgs[i];
-        row.push({ text: `💵 ${p1.taka}৳ = ${p1.coins} Coin`, callback_data: `dep_pkg_${id1}` });
+        row.push({ text: `💵 ${p1.taka}৳ = ${p1.coins} Coin`, callback_data: `dep_pkg_${id1}`, style: 'primary' });
 
         if (i + 1 < pkgs.length) {
             const [id2, p2] = pkgs[i + 1];
-            row.push({ text: `💵 ${p2.taka}৳ = ${p2.coins} Coin`, callback_data: `dep_pkg_${id2}` });
+            row.push({ text: `💵 ${p2.taka}৳ = ${p2.coins} Coin`, callback_data: `dep_pkg_${id2}`, style: 'success' });
         }
         buttons.push(row);
     }
@@ -344,7 +595,7 @@ function getDepositPackagesKeyboard() {
 
 /*
 |--------------------------------------------------------------------------
-| ৯. আপডেট প্রসেসর
+| ১০. আপডেট প্রসেসর
 |--------------------------------------------------------------------------
 */
 async function handleUpdate(update) {
@@ -357,6 +608,32 @@ async function handleUpdate(update) {
         const data = callback.data || '';
         const chatId = callback.message?.chat?.id;
         const messageId = callback.message?.message_id;
+
+        // কঠোর ফোর্স চ্যানেল চেকিং (ভেরিফাই বাটন ব্যতীত)
+        if (!isAdmin(fromId) && data !== 'verify_join') {
+            const joinedAll = await isUserJoinedAllChannels(fromId);
+            if (!joinedAll) {
+                answerCallback(callback.id, "⚠️ Please join all channels first!", true);
+                showForceJoin(fromId, callback.from.first_name);
+                return;
+            }
+        }
+
+        // চ্যানেল জয়েন ভেরিফিকেশন ও রেফারেল রিওয়ার্ড
+        if (data === 'verify_join') {
+            answerCallback(callback.id);
+            const check = await verifyAndRewardUser(fromId, callback.from);
+            if (!check.success) {
+                if (chatId && messageId) deleteMessage(chatId, messageId).catch(() => {});
+                sendMessage(fromId, "⚠️ <b>Please join all channels first!</b>");
+                showForceJoin(fromId, callback.from.first_name);
+                return;
+            }
+
+            if (chatId && messageId) deleteMessage(chatId, messageId).catch(() => {});
+            sendMessage(fromId, `✅ <b>Verification Successful!</b>\n\nWelcome to ${escapeHtml(BOT_NAME)}! 🎉`, getUserMenu(fromId));
+            return;
+        }
 
         // --- ডিপোজিট প্যাকেজ সিলেক্ট ---
         if (data.startsWith('dep_pkg_')) {
@@ -382,7 +659,7 @@ async function handleUpdate(update) {
 
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: '📥 পেমেন্ট প্রুফ জমা দিন', callback_data: `start_dep_proof_${pkgId}` }]
+                    [{ text: '📥 পেমেন্ট প্রুফ জমা দিন', callback_data: `start_dep_proof_${pkgId}`, style: 'success' }]
                 ]
             };
 
@@ -424,7 +701,6 @@ async function handleUpdate(update) {
             const isRefer = data === 'view_cat_refer';
             const targetType = isRefer ? 'bot_refer' : 'poll_vote';
 
-            // টাস্ক ফিল্টারিং ও সর্বোচ্চ কয়েন অনুযায়ী সাজানো (Highest Reward First)
             const tasks = Array.from(cache.tasks.values())
                 .filter(t => t.status === 'active' && t.type === targetType)
                 .sort((a, b) => Number(b.reward_per_worker) - Number(a.reward_per_worker));
@@ -439,14 +715,15 @@ async function handleUpdate(update) {
                 buttons.push([
                     {
                         text: `🔥 ${formatNumber(t.reward_per_worker)} Coins | টার্গেট: ${t.completed_count}/${t.total_needed}`,
-                        callback_data: `do_task_${t.task_id}`
+                        callback_data: `do_task_${t.task_id}`,
+                        style: 'primary'
                     }
                 ]);
             }
 
             sendMessage(fromId,
                 `💰 <b>উপলব্ধ ${isRefer ? 'Bot Refer' : 'Poll Vote'} কাজসমূহ</b>\n` +
-                `<i>(যেগুলোতে বেশি কয়েন দেওয়া হচ্ছে সেগুলো উপরে সাজানো রয়েছে)</i>:\n\nকাজ করতে যেকোনো একটি বেছে নিন:`,
+                `<i>(যেগুলোতে বেশি কয়েন দেওয়া হচ্ছে সেগুলো সবার উপরে সাজানো রয়েছে)</i>:\n\nকাজ করতে যেকোনো একটি বেছে নিন:`,
                 { inline_keyboard: buttons }
             );
             return;
@@ -487,34 +764,7 @@ async function handleUpdate(update) {
             return;
         }
 
-        // --- অ্যাডমিন সেটিংস কলব্যাক ---
-        if (isAdmin(fromId)) {
-            if (data === 'admin_set_dep_chan') {
-                answerCallback(callback.id);
-                cache.adminStates.set(fromId, { action: 'cfg_dep_chan' });
-                sendMessage(fromId, "💳 <b>ডিপোজিট চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
-                return;
-            }
-
-            if (data === 'admin_set_proof_chan') {
-                answerCallback(callback.id);
-                cache.adminStates.set(fromId, { action: 'cfg_proof_chan' });
-                sendMessage(fromId, "📸 <b>টাস্ক প্রুফ চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
-                return;
-            }
-
-            if (data === 'admin_set_min_task_reward') {
-                answerCallback(callback.id);
-                cache.adminStates.set(fromId, { action: 'cfg_min_task_reward' });
-                const cur = getSetting('min_task_reward', 1);
-                sendMessage(fromId, `🪙 <b>টাস্ক তৈরির সময় মিনিমাম কয়েন রেট সেট করুন:</b>\nবর্তমান: <b>${cur} Coins</b>\n\nনতুন সংখ্যা পাঠান:`, getCancelKeyboard());
-                return;
-            }
-        }
-
-        // =========================================================================
-        // অ্যাডমিন একশন: ডিপোজিট অ্যাপ্রুভ / রিজেক্ট
-        // =========================================================================
+        // --- ডিপোজিট অ্যাপ্রুভ / রিজেক্ট ---
         const depMatch = data.match(/^dep_(app|rej)_([A-Za-z0-9_-]+)$/);
         if (depMatch) {
             if (!isAdmin(fromId)) {
@@ -583,9 +833,7 @@ async function handleUpdate(update) {
             }
         }
 
-        // =========================================================================
-        // অ্যাডমিন একশন: টাস্ক প্রুফ অ্যাপ্রুভ / রিজেক্ট
-        // =========================================================================
+        // --- টাস্ক প্রুফ অ্যাপ্রুভ / রিজেক্ট ---
         const taskProofMatch = data.match(/^tp_(app|rej)_([A-Za-z0-9_-]+)$/);
         if (taskProofMatch) {
             if (!isAdmin(fromId)) {
@@ -638,6 +886,112 @@ async function handleUpdate(update) {
                 return;
             }
         }
+
+        // =========================================================================
+        // অ্যাডমিন সেটিংস ও ফোর্স চ্যানেল কলব্যাক
+        // =========================================================================
+        if (isAdmin(fromId)) {
+            if (data === 'admin_set_dep_chan') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'cfg_dep_chan' });
+                sendMessage(fromId, "💳 <b>ডিপোজিট চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
+                return;
+            }
+
+            if (data === 'admin_set_proof_chan') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'cfg_proof_chan' });
+                sendMessage(fromId, "📸 <b>টাস্ক প্রুফ চ্যানেল আইডি পাঠান (যেমন: -100...):</b>", getCancelKeyboard());
+                return;
+            }
+
+            if (data === 'admin_set_min_task_reward') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'cfg_min_task_reward' });
+                const cur = getSetting('min_task_reward', 1);
+                sendMessage(fromId, `🪙 <b>টাস্কের মিনিমাম কয়েন রেট সেট করুন:</b>\nবর্তমান: <b>${cur} Coins</b>\n\nনতুন সংখ্যা পাঠান:`, getCancelKeyboard());
+                return;
+            }
+
+            // প্যাকেজ রিমুভ কলব্যাক
+            const remPkgMatch = data.match(/^rem_pkg_([A-Za-z0-9_-]+)$/);
+            if (remPkgMatch) {
+                answerCallback(callback.id);
+                const pkgId = remPkgMatch[1];
+                cache.packages.delete(pkgId);
+                firebaseRequest(`packages/${pkgId}`, 'DELETE').catch(() => {});
+                sendMessage(fromId, "✅ <b>প্যাকেজটি সফলভাবে মুছে ফেলা হয়েছে!</b>", getAdminMenu());
+                return;
+            }
+
+            // ফোর্স চ্যানেল কলব্যাকসমূহ
+            if (data === 'force_add') {
+                answerCallback(callback.id);
+                cache.adminStates.set(fromId, { action: 'add_force_channel_input' });
+                sendMessage(fromId, "➕ <b>ফোর্স চ্যানেল যোগ করুন</b>\n\nচ্যানেলের <b>ID</b> (যেমন: <code>-100...</code>) অথবা <b>Username</b> (যেমন: <code>@mychannel</code> বা লিংক) পাঠান:", getCancelKeyboard());
+                return;
+            }
+
+            if (data === 'force_remove') {
+                answerCallback(callback.id);
+                const channels = cache.forceChannels;
+                if (!Object.keys(channels).length) {
+                    sendMessage(fromId, "⚠️ <b>কোনো Channel তালিকায় নেই!</b>");
+                    return;
+                }
+                const kb = [];
+                for (const [k, c] of Object.entries(channels)) {
+                    if (c) kb.push([{ text: `❌ ${c.channel_name || 'Channel'}`, callback_data: `removeforce_${k}`, style: 'danger' }]);
+                }
+                sendMessage(fromId, "📢 <b>ফোর্স চ্যানেল রিমুভ</b>\n\nChannel নির্বাচন করুন:", { inline_keyboard: kb });
+                return;
+            }
+
+            const removeForceMatch = data.match(/^removeforce_([A-Za-z0-9_-]+)$/);
+            if (removeForceMatch) {
+                answerCallback(callback.id);
+                delete cache.forceChannels[removeForceMatch[1]];
+                cache.userChannels.clear();
+                firebaseRequest(`force_channels/${removeForceMatch[1]}`, 'DELETE').catch(() => {});
+                sendMessage(fromId, "✅ <b>চ্যানেল সফলভাবে রিমুভ হয়েছে!</b>", getAdminMenu());
+                return;
+            }
+
+            if (data === 'force_list') {
+                answerCallback(callback.id);
+                const channels = Object.entries(cache.forceChannels).filter(([_, c]) => c && c.channel_id);
+                let list = "📢 <b>ফোর্স চ্যানেল তালিকা ও স্ট্যাটাস</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
+                if (!channels.length) {
+                    list += "\nকোনো Force Join Channel যুক্ত নেই।";
+                } else {
+                    const checkedList = await Promise.all(channels.map(async ([key, c], idx) => {
+                        const isAdminThere = await isBotAdminInChat(c.channel_id);
+                        const statusText = isAdminThere ? "✅ Bot Admin" : "⚠️ Bot Not Admin";
+                        let uName = c.channel_username || '';
+                        if (!uName && c.channel_link) {
+                            uName = normalizeChannelInput(c.channel_link);
+                        }
+                        if (!uName) uName = `ID: ${c.channel_id}`;
+                        return {
+                            index: idx + 1,
+                            name: c.channel_name || 'Channel',
+                            id: c.channel_id,
+                            username: uName,
+                            statusText: statusText
+                        };
+                    }));
+
+                    for (const item of checkedList) {
+                        list += `\n<b>#${item.index}. ${escapeHtml(item.name)}</b> (${item.statusText})\n` +
+                                `🆔 ID: <code>${escapeHtml(item.id)}</code>\n` +
+                                `🔗 Username / Link: <code>${escapeHtml(item.username)}</code>\n` +
+                                `👮 এডমিন স্ট্যাটাস: <b>${item.statusText}</b>\n`;
+                    }
+                }
+                sendLongMessage(fromId, list);
+                return;
+            }
+        }
     }
 
     // -------------------------------------------------------------
@@ -664,22 +1018,11 @@ async function handleUpdate(update) {
                 balance: 0,
                 total_referrals: 0,
                 referred_by: refBy,
+                referral_rewarded: false,
+                is_verified: isAdm,
                 created_at: Math.floor(Date.now() / 1000)
             };
-            cache.users.set(fromId, user);
-            firebaseRequest(`users/${fromId}`, 'PUT', user).catch(() => {});
-
-            if (refBy) {
-                const refUser = await getUser(refBy);
-                if (refUser) {
-                    const refBonus = Number(getSetting('referral_bonus', 2));
-                    updateUser(refBy, {
-                        balance: Number(refUser.balance || 0) + refBonus,
-                        total_referrals: Number(refUser.total_referrals || 0) + 1
-                    });
-                    sendMessage(refBy, `🎉 <b>নতুন রেফারেল যুক্ত হয়েছে!</b> +${refBonus} Coins যোগ হয়েছে।`).catch(() => {});
-                }
-            }
+            setUser(fromId, user);
         }
 
         if (text === '/cancel') {
@@ -690,11 +1033,24 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
+        // 🚨 কঠোর রিয়েল-টাইম ফোর্স চ্যানেল গেট (মেসেজ ফিল্টারিং)
+        // =========================================================================
+        if (!isAdm) {
+            const joinedAll = await isUserJoinedAllChannels(fromId);
+            if (!joinedAll) {
+                if (user.is_verified) {
+                    updateUser(fromId, { is_verified: false });
+                }
+                showForceJoin(chatId, msg.from.first_name);
+                return;
+            }
+        }
+
+        // =========================================================================
         // ডিপোজিট প্রুফ সাবমিশন (কঠোর ইনপুট ভ্যালিডেশন)
         // =========================================================================
         const uState = cache.userStates.get(fromId);
 
-        // ধাপ ১: স্ক্রিনশট ফটো চেক
         if (uState?.action === 'dep_step_photo') {
             if (!msg.photo || !msg.photo.length) {
                 sendMessage(chatId, "❌ <b>ভুল ইনপুট!</b> দয়া করে পেমেন্টের সঠিক <b>স্ক্রিনশট ছবি (Photo)</b> পাঠান:", getCancelKeyboard());
@@ -717,7 +1073,6 @@ async function handleUpdate(update) {
             return;
         }
 
-        // ধাপ ২: Trx ID ভ্যালিডেশন ও ডুপ্লিকেট চেক
         if (uState?.action === 'dep_step_trx') {
             if (!text || !isValidTrxId(text)) {
                 sendMessage(chatId, "❌ <b>ভুল Trx ID!</b> দয়া করে সঠিক Transaction ID লিখে পাঠান:", getCancelKeyboard());
@@ -753,7 +1108,6 @@ async function handleUpdate(update) {
             return;
         }
 
-        // ধাপ ৩: প্রেরক মোবাইল নাম্বার ভ্যালিডেশন
         if (uState?.action === 'dep_step_phone') {
             if (!text || !isValidBDPhone(text)) {
                 sendMessage(chatId, "❌ <b>ভুল মোবাইল নাম্বার!</b> দয়া করে সঠিক ১১ ডিজিটের বাংলাদেশি মোবাইল নাম্বার লিখুন (যেমন: <code>017xxxxxxxx</code>):", getCancelKeyboard());
@@ -799,8 +1153,8 @@ async function handleUpdate(update) {
             const adminKeyboard = {
                 inline_keyboard: [
                     [
-                        { text: '✅ Approve', callback_data: `dep_app_${depId}` },
-                        { text: '❌ Reject', callback_data: `dep_rej_${depId}` }
+                        { text: '✅ Approve', callback_data: `dep_app_${depId}`, style: 'success' },
+                        { text: '❌ Reject', callback_data: `dep_rej_${depId}`, style: 'danger' }
                     ]
                 ]
             };
@@ -819,7 +1173,7 @@ async function handleUpdate(update) {
         }
 
         // =========================================================================
-        // টাস্ক তৈরির ফ্লো (বায়ার কাস্টম কয়েন অফার ও ভ্যালিডেশন)
+        // টাস্ক তৈরির ফ্লো (Bot Refer ও Poll Vote এর আলাদা নিয়মাবলী প্রম্পট)
         // =========================================================================
         if (uState?.action === 'create_task_link') {
             if (!text || !isValidURL(text)) {
@@ -828,11 +1182,21 @@ async function handleUpdate(update) {
             }
 
             cache.userStates.set(fromId, { ...uState, action: 'create_task_rules', link: text.trim() });
-            sendMessage(chatId,
-                `📝 <b>কাজের নিয়মাবলী লিখে পাঠান:</b>\n` +
-                `<i>(যেমন: বটে স্টার্ট দিয়ে ফোন নাম্বার শেয়ার করুন / ৩ নম্বর অপশনে ভোট দিন)</i>`,
-                getCancelKeyboard()
-            );
+
+            // টাস্কের ধরন অনুযায়ী আলাদা নিয়ম প্রদর্শন
+            if (uState.taskType === 'bot_refer') {
+                sendMessage(chatId,
+                    `📝 <b>কাজের নিয়মাবলী লিখে পাঠান:</b>\n` +
+                    `<i>(যেমন: বটে স্টার্ট দিয়ে চ্যানেল জয়েন করুন)</i>`,
+                    getCancelKeyboard()
+                );
+            } else {
+                sendMessage(chatId,
+                    `📝 <b>কাজের নিয়মাবলী লিখে পাঠান:</b>\n` +
+                    `<i>(যেমন: SΛKIB 〆 DΞVΞLOPΞR কে ভোট দিন)</i>`,
+                    getCancelKeyboard()
+                );
+            }
             return;
         }
 
@@ -890,7 +1254,6 @@ async function handleUpdate(update) {
                 return;
             }
 
-            // ব্যালেন্স কাটা ও টাস্ক একটিভ করা
             updateUser(fromId, { balance: currentBal - totalCost });
 
             const taskId = `TSK${Math.floor(1000 + Math.random() * 9000)}`;
@@ -917,7 +1280,7 @@ async function handleUpdate(update) {
                 `🎯 <b>টার্গেট:</b> ${uState.qty} টি\n` +
                 `💰 <b>প্রতি কাজের রেট:</b> ${rewardPerTask} Coins\n` +
                 `💵 <b>মোট খরচ:</b> ${totalCost} Coins\n\n` +
-                `টাস্কটি বর্তমানে লাইভ রয়েছে। 'আমার কাজ' থেকে লাইভ আপডেট দেখতে পারবেন।`,
+                `টাস্কটি বর্তমানে লাইভ রয়েছে। 'My Tasks' থেকে লাইভ আপডেট দেখতে পারবেন।`,
                 getUserMenu(fromId)
             );
             return;
@@ -960,8 +1323,8 @@ async function handleUpdate(update) {
             const adminKb = {
                 inline_keyboard: [
                     [
-                        { text: '✅ Approve', callback_data: `tp_app_${subId}` },
-                        { text: '❌ Reject', callback_data: `tp_rej_${subId}` }
+                        { text: '✅ Approve', callback_data: `tp_app_${subId}`, style: 'success' },
+                        { text: '❌ Reject', callback_data: `tp_rej_${subId}`, style: 'danger' }
                     ]
                 ]
             };
@@ -1057,18 +1420,69 @@ async function handleUpdate(update) {
                 }
                 return;
             }
+
+            // ফোর্স চ্যানেল ইনপুট
+            if (aState?.action === 'add_force_channel_input') {
+                sendMessage(chatId, "🔍 চ্যানেল এবং পারমিশন ভেরিফাই করা হচ্ছে...");
+                const check = await verifyChannelAndBotAdmin(text);
+                if (!check.ok) {
+                    sendMessage(chatId, check.error, getCancelKeyboard());
+                    return;
+                }
+                cache.adminStates.set(fromId, {
+                    action: 'add_force_channel_confirm',
+                    channel_id: check.channel_id,
+                    channel_title: check.channel_title,
+                    channel_username: check.channel_username,
+                    channel_link: check.channel_link
+                });
+                sendMessage(chatId, `✅ <b>চ্যানেল ভেরিফাইড!</b>\n📢 ${escapeHtml(check.channel_title)}\n\n🔘 বাটনের নাম লিখুন (যেমন: Join):`, getCancelKeyboard());
+                return;
+            }
+
+            if (aState?.action === 'add_force_channel_confirm') {
+                const btnName = text.trim() || aState.channel_title;
+                const chObj = {
+                    channel_id: aState.channel_id,
+                    channel_link: aState.channel_link || `https://t.me/${aState.channel_id}`,
+                    channel_name: btnName,
+                    channel_username: aState.channel_username || '',
+                    added_by: fromId,
+                    added_at: Math.floor(Date.now() / 1000)
+                };
+                const newKey = `fc_${Date.now()}`;
+                cache.forceChannels[newKey] = chObj;
+                cache.userChannels.clear();
+                firebaseRequest(`force_channels/${newKey}`, 'PUT', chObj).catch(() => {});
+                cache.adminStates.delete(fromId);
+                sendMessage(chatId, `🎉 <b>Force Join Channel Added Successfully!</b>\n\n📢 <b>${escapeHtml(btnName)}</b>`, getAdminMenu());
+                return;
+            }
         }
 
         // =========================================================================
-        // সাধারণ মেনু বাটনসমূহ
+        // সাধারণ ইউজার মেনু বাটনসমূহ (ইংলিশ লেবেল)
         // =========================================================================
         if (text === '/start' || text.startsWith('/start')) {
             sendMessage(chatId,
-                `👋 <b>স্বাগতম ${escapeHtml(msg.from.first_name || 'User')}!</b>\n\n` +
-                `এখানে আপনি টেলিগ্রাম বটের রেফারেল ও পোল ভোট কিনতে পারবেন অথবা নিজে কাজ করে কয়েন আয় করতে পারবেন।\n` +
-                `শুরু করতে নিচের অপশনগুলো ব্যবহার করুন:`,
+                `👋 <b>Welcome ${escapeHtml(msg.from.first_name || 'User')}!</b>\n\n` +
+                `Earn coins by completing simple tasks or promote your own Bot Referrals & Poll Votes.\n` +
+                `Use the buttons below to get started:`,
                 getUserMenu(fromId)
             );
+            return;
+        }
+
+        if (text === '💰 Earn Coins') {
+            const kb = {
+                inline_keyboard: [
+                    [
+                        { text: '📢 Bot Refer Tasks', callback_data: 'view_cat_refer', style: 'primary' },
+                        { text: '📦 Poll Vote Tasks', callback_data: 'view_cat_vote', style: 'success' }
+                    ]
+                ]
+            };
+            sendMessage(chatId, "💰 <b>Earn Coins Section</b>\nSelect the task category you want to complete:", kb);
             return;
         }
 
@@ -1100,23 +1514,10 @@ async function handleUpdate(update) {
             return;
         }
 
-        if (text === '💰 আর্ন কয়েন') {
-            const kb = {
-                inline_keyboard: [
-                    [
-                        { text: '📢 Bot Refer কাজসমূহ', callback_data: 'view_cat_refer' },
-                        { text: '📦 Poll Vote কাজসমূহ', callback_data: 'view_cat_vote' }
-                    ]
-                ]
-            };
-            sendMessage(chatId, "💰 <b>আর্ন কয়েন সেকশন</b>\nআপনি কোন ধরনের কাজ সম্পন্ন করে কয়েন আয় করতে চান?", kb);
-            return;
-        }
-
-        if (text === '📜 আমার কাজ') {
-            sendMessage(chatId, "🔍 <i>আপনার টাস্ক লোড হচ্ছে...</i>");
+        if (text === '📜 My Tasks') {
+            sendMessage(chatId, "🔍 <i>Loading your tasks...</i>");
             const all = await firebaseRequest('tasks');
-            let out = `📜 <b>আপনার অর্ডার করা কাজের তালিকা</b>\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+            let out = `📜 <b>YOUR ORDERED TASKS</b>\n━━━━━━━━━━━━━━━━━━━━\n\n`;
             let has = false;
 
             if (all && typeof all === 'object') {
@@ -1124,68 +1525,82 @@ async function handleUpdate(update) {
                     if (t && String(t.creator_id) === fromId) {
                         has = true;
                         const remaining = Math.max(0, Number(t.total_needed) - Number(t.completed_count || 0));
-                        out += `📋 <b>টাস্ক আইডি:</b> <code>#${t.task_id}</code>\n` +
-                            `📌 ধরন: ${t.type === 'bot_refer' ? '📢 Bot Refer' : '📦 Poll Vote'}\n` +
-                            `🎯 টার্গেট: <b>${t.total_needed} টি</b>\n` +
-                            `✅ পূরণ হয়েছে: <b>${t.completed_count || 0} টি</b>\n` +
-                            `⏳ বাকি আছে: <b>${remaining} টি</b>\n` +
-                            `💰 রেট: <b>${t.reward_per_worker} Coins/কাজ</b>\n` +
-                            `📊 স্ট্যাটাস: <b>${t.status.toUpperCase()}</b>\n` +
+                        out += `📋 <b>Task ID:</b> <code>#${t.task_id}</code>\n` +
+                            `📌 Type: ${t.type === 'bot_refer' ? '📢 Bot Refer' : '📦 Poll Vote'}\n` +
+                            `🎯 Target: <b>${t.total_needed}</b>\n` +
+                            `✅ Completed: <b>${t.completed_count || 0}</b>\n` +
+                            `⏳ Remaining: <b>${remaining}</b>\n` +
+                            `💰 Rate: <b>${t.reward_per_worker} Coins/task</b>\n` +
+                            `📊 Status: <b>${t.status.toUpperCase()}</b>\n` +
                             `━━━━━━━━━━━━━━━━━━━━\n`;
                     }
                 }
             }
 
-            if (!has) out += "❌ আপনি এখনো কোনো কাজ অর্ডার করেননি।";
+            if (!has) out += "❌ You have not created any tasks yet.";
             sendMessage(chatId, out, getUserMenu(fromId));
             return;
         }
 
-        if (text === '👤 প্রোফাইল') {
+        if (text === '👤 Profile') {
             const u = await getUser(fromId);
             const prof =
-                `👤 <b>আপনার প্রোফাইল</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `👤 <b>YOUR PROFILE</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
                 `🆔 <b>ID:</b> <code>${fromId}</code>\n` +
-                `👤 <b>নাম:</b> ${escapeHtml(msg.from.first_name || 'User')}\n` +
+                `👤 <b>Name:</b> ${escapeHtml(msg.from.first_name || 'User')}\n` +
                 `🔗 <b>Username:</b> ${msg.from.username ? `@${msg.from.username}` : 'N/A'}\n\n` +
                 `💰 <b>Balance:</b> <b>${formatNumber(u?.balance || 0)} Coins</b>\n` +
-                `👥 <b>Total Referrals:</b> ${u?.total_referrals || 0} জন`;
+                `👥 <b>Total Referrals:</b> ${u?.total_referrals || 0} Users`;
             sendMessage(chatId, prof, getUserMenu(fromId));
             return;
         }
 
-        if (text === '📮 Referral' || text === '🎯 Refer & Earn') {
+        if (text === '📮 Referral') {
             const link = `https://t.me/${BOT_USERNAME}?start=${fromId}`;
             const bonus = getSetting('referral_bonus', 2);
             const refText =
-                `📮 <b>Refer & Earn</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
-                `আপনার রেফারেল লিংক শেয়ার করে বন্ধুদের ইনভাইট করুন এবং ফ্রি কয়েন আয় করুন!\n\n` +
-                `🎁 <b>প্রতি সফল রেফারে পাবেন:</b> ${bonus} Coins\n\n` +
-                `🔗 <b>আপনার রেফারেল লিংক:</b>\n<code>${link}</code>`;
+                `📮 <b>Refer & Earn Program</b>\n━━━━━━━━━━━━━━━━━━━━\n\n` +
+                `Share your invite link with friends and earn free coins!\n\n` +
+                `🎁 <b>Reward:</b> ${bonus} Coins per verified referral\n\n` +
+                `🔗 <b>Your Referral Link:</b>\n<code>${link}</code>\n\n` +
+                `<i>⚠️ Note: Referrals count only after channels are verified!</i>`;
             sendMessage(chatId, refText, getUserMenu(fromId));
             return;
         }
 
         if (text === '💬 Support') {
-            sendMessage(chatId, `💬 <b>সাপোর্ট সেন্টার</b>\n\nযেকোনো সমস্যায় আমাদের সাপোর্ট এডমিনের সাথে যোগাযোগ করুন:\n👉 ${DEFAULT_SUPPORT_URL}`);
+            sendMessage(chatId, `💬 <b>Support Center</b>\n\nNeed help? Contact our support administrator:\n👉 ${DEFAULT_SUPPORT_URL}`);
             return;
         }
 
         // =========================================================================
-        // অ্যাডমিন মেনু
+        // অ্যাডমিন মেনু বাটনসমূহ
         // =========================================================================
         if (text === '🛠 Admin Panel' && isAdm) {
-            sendMessage(chatId, "🛠 <b>এডমিন প্যানেল চালু হয়েছে</b>", getAdminMenu());
+            sendMessage(chatId, "🛠 <b>Admin Control Panel Activated</b>", getAdminMenu());
             return;
         }
 
-        if (text === '➕ প্যাকেজ যোগ করুন' && isAdm) {
+        if (text === '➕ Add Package' && isAdm) {
             cache.adminStates.set(fromId, { action: 'pkg_add_taka' });
             sendMessage(chatId, "➕ <b>নতুন প্যাকেজ তৈরি</b>\n\nপ্রথমে টাকার পরিমাণ (BDT) লিখুন:\n<i>(যেমন: 20)</i>", getCancelKeyboard());
             return;
         }
 
-        if (text === '📋 প্যাকেজ তালিকা' && isAdm) {
+        if (text === '➖ Remove Package' && isAdm) {
+            if (!cache.packages.size) {
+                sendMessage(chatId, "⚠️ কোনো প্যাকেজ নেই!");
+                return;
+            }
+            const kb = [];
+            for (const [id, p] of cache.packages) {
+                kb.push([{ text: `❌ ${p.taka}৳ = ${p.coins} Coins`, callback_data: `rem_pkg_${id}`, style: 'danger' }]);
+            }
+            sendMessage(chatId, "🗑 <b>যে প্যাকেজটি ডিলিট করতে চান নির্বাচন করুন:</b>", { inline_keyboard: kb });
+            return;
+        }
+
+        if (text === '📋 Package List' && isAdm) {
             let list = "📋 <b>বর্তমান ডিপোজিট প্যাকেজসমূহ:</b>\n━━━━━━━━━━━━━━━━━━━━\n";
             if (!cache.packages.size) list += "কোনো প্যাকেজ নেই।";
             else {
@@ -1197,26 +1612,32 @@ async function handleUpdate(update) {
             return;
         }
 
-        if (text === '⚙️ সেন্ট্রাল সেটিংস' && isAdm) {
-            const kb = {
-                inline_keyboard: [
-                    [{ text: '💳 ডিপোজিট চ্যানেল সেট', callback_data: 'admin_set_dep_chan' }],
-                    [{ text: '📸 টাস্ক প্রুফ চ্যানেল সেট', callback_data: 'admin_set_proof_chan' }],
-                    [{ text: '🪙 মিনিমাম টাস্ক কয়েন রেট', callback_data: 'admin_set_min_task_reward' }]
-                ]
-            };
-            sendMessage(chatId, "⚙️ <b>সেন্ট্রাল সেটিংস:</b>", kb);
+        if (text === '📢 Force Channels' && isAdm) {
+            const count = Object.keys(cache.forceChannels).length;
+            sendMessage(chatId, `📢 <b>FORCE JOIN CHANNELS</b>\n\nমোট চ্যানেল: <b>${count}</b> টি`, forceJoinKeyboard());
             return;
         }
 
-        if (text === '👥 ব্যালেন্স কন্ট্রোল' && isAdm) {
+        if (text === '⚙️ Central Settings' && isAdm) {
+            const kb = {
+                inline_keyboard: [
+                    [{ text: '💳 ডিপোজিট চ্যানেল সেট', callback_data: 'admin_set_dep_chan', style: 'primary' }],
+                    [{ text: '📸 টাস্ক প্রুফ চ্যানেল সেট', callback_data: 'admin_set_proof_chan', style: 'primary' }],
+                    [{ text: '🪙 মিনিমাম টাস্ক কয়েন রেট', callback_data: 'admin_set_min_task_reward', style: 'success' }]
+                ]
+            };
+            sendMessage(chatId, "⚙️ <b>সেন্ট্রাল সেটিংস কনফিগারেশন:</b>", kb);
+            return;
+        }
+
+        if (text === '👥 Balance Control' && isAdm) {
             cache.adminStates.set(fromId, { action: 'balance_add_uid' });
-            sendMessage(chatId, "👥 <b>ব্যালেন্স যোগ</b>\n\nইউজারের Telegram Numeric ID পাঠান:", getCancelKeyboard());
+            sendMessage(chatId, "👥 <b>ব্যালেন্স যোগ করুন</b>\n\nইউজারের Telegram Numeric ID পাঠান:", getCancelKeyboard());
             return;
         }
 
         if (text === '🔙 Back to User Panel') {
-            sendMessage(chatId, "👤 <b>ইউজার মেনু</b>", getUserMenu(fromId));
+            sendMessage(chatId, "👤 <b>User Menu</b>", getUserMenu(fromId));
             return;
         }
     }
@@ -1224,17 +1645,18 @@ async function handleUpdate(update) {
 
 /*
 |--------------------------------------------------------------------------
-| ১০. ক্যাশ প্রি-ওয়ার্মিং
+| ১১. ক্যাশ প্রি-ওয়ার্মিং (স্টার্টআপে দ্রুত লোড)
 |--------------------------------------------------------------------------
 */
 async function preloadEngine() {
     console.log(`⚡ Pre-warming Cache for ${BOT_NAME}...`);
     try {
-        const [settings, pkgs, trxList, tasksList] = await Promise.all([
+        const [settings, pkgs, trxList, tasksList, forceCh] = await Promise.all([
             firebaseRequest('settings'),
             firebaseRequest('packages'),
             firebaseRequest('used_trxids'),
-            firebaseRequest('tasks')
+            firebaseRequest('tasks'),
+            firebaseRequest('force_channels')
         ]);
 
         if (settings && typeof settings === 'object') {
@@ -1260,6 +1682,10 @@ async function preloadEngine() {
             for (const [k, v] of Object.entries(tasksList)) cache.tasks.set(k, v);
         }
 
+        if (forceCh && typeof forceCh === 'object') {
+            cache.forceChannels = forceCh;
+        }
+
         console.log(`✅ System connected & Ready! Number: ${PAYMENT_NUMBER}`);
     } catch (e) {
         console.error('Preload Error:', e.message);
@@ -1268,7 +1694,7 @@ async function preloadEngine() {
 
 /*
 |--------------------------------------------------------------------------
-| ১১. এক্সপ্রেস সার্ভার ও রেন্ডার কিপ-এলাইভ
+| ১২. এক্সপ্রেস সার্ভার ও রেন্ডার কিপ-এলাইভ পিং
 |--------------------------------------------------------------------------
 */
 const app = express();
